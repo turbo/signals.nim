@@ -2254,7 +2254,7 @@ proc `==`*[T](a: seq[T], b: seq[Signal[T]]): bool =
 
 # std/bitops
 
-template makeComputed(s: Signal; e: untyped): untyped =
+template makeComputed(s: Signal, e: untyped): untyped =
   s.ctx.computed(() => e)
 
 proc `not`*[T: SomeInteger](a: Signal[T]): Signal[T] =
@@ -2281,26 +2281,105 @@ proc `xor`*[T: SomeInteger](a: Signal[T], b: T): Signal[T] =
 proc `xor`*[T: SomeInteger](a: T, b: Signal[T]): Signal[T] =
   makeComputed(b, a xor b.val)
 
-proc rotateLeftBits*[T: SomeUnsignedInt](
-  s: Signal[T]; k: range[0 .. sizeof(T) * 8]): Signal[T] =
-  makeComputed(s, rotateLeftBits(s.val, k))
-
-proc rotateRightBits*[T: SomeUnsignedInt](
-  s: Signal[T]; k: range[0 .. sizeof(T) * 8]): Signal[T] =
-  makeComputed(s, rotateRightBits(s.val, k))
-
-proc testBit*[T: SomeInteger](
-  s: Signal[T]; bit: BitsRange[T]): Signal[bool] =
-  makeComputed(s, testBit(s.val, bit))
-
-proc flipBit*[T: SomeInteger](s: Signal[T]; bit: BitsRange[T]) =
-  ## Mutates the *contained* value exactly as std/bitops.flipBit would.
-  s.set:
-    var tmp = s.val
-    tmp.flipBit bit
-    tmp # returned -> new value
-
 proc flippedBit*[T: SomeInteger](
-  s: Signal[T]; bit: BitsRange[T]): Signal[T] =
+  s: Signal[T],
+  bit: BitsRange[T]
+): Signal[T] =
   ## Reactive wrapper: always equals `s.val` with `bit` toggled.
   makeComputed(s, (var tmp = s.val; tmp.flipBit bit; tmp))
+
+template mutateSignal[T](s: Signal[T], body: untyped) =
+  ## 1. copy -> 2. run the mutator -> 3. write-back
+  block:
+    var tmp = s.val # (1) read  (tracks dependency)
+    body(tmp)              # (2) mutate whatever way you like
+    s.set tmp              # (3) single history entry
+
+proc mask*[T: SomeInteger](s: Signal[T], mask: T) =
+  mutateSignal(s, proc (v: var VT(s)) = bitops.mask(v, mask))
+
+proc mask*[T: SomeInteger](s: Signal[T], slice: Slice[int]) =
+  mutateSignal(s, proc (v: var VT(s)) = bitops.mask(v, slice))
+
+proc setMask*[T: SomeInteger](s: Signal[T], mask: T) =
+  mutateSignal(s, proc (v: var VT(s)) = bitops.setMask(v, mask))
+
+proc setMask*[T: SomeInteger](s: Signal[T], slice: Slice[int]) =
+  mutateSignal(s, proc (v: var VT(s)) = bitops.setMask(v, slice))
+
+proc clearMask*[T: SomeInteger](s: Signal[T], mask: T) =
+  mutateSignal(s, proc (v: var VT(s)) = bitops.clearMask(v, mask))
+
+proc clearMask*[T: SomeInteger](s: Signal[T], slice: Slice[int]) =
+  mutateSignal(s, proc (v: var VT(s)) = bitops.clearMask(v, slice))
+
+proc flipMask*[T: SomeInteger](s: Signal[T], mask: T) =
+  mutateSignal(s, proc (v: var VT(s)) = bitops.flipMask(v, mask))
+
+proc flipMask*[T: SomeInteger](s: Signal[T], slice: Slice[int]) =
+  mutateSignal(s, proc (v: var VT(s)) = bitops.flipMask(v, slice))
+
+proc setBit*[T: SomeInteger](s: Signal[T], bit: BitsRange[T]) =
+  mutateSignal(s, proc (v: var VT(s)) = bitops.setBit(v, bit))
+
+proc clearBit*[T: SomeInteger](s: Signal[T], bit: BitsRange[T]) =
+  mutateSignal(s, proc (v: var VT(s)) = bitops.clearBit(v, bit))
+
+proc flipBit*[T: SomeInteger](s: Signal[T], bit: BitsRange[T]) =
+  mutateSignal(s, proc (v: var VT(s)) = bitops.flipBit(v, bit))
+
+proc rotateLeftBits*[T: SomeUnsignedInt](
+  s: Signal[T]; shift: range[0 .. sizeof(T)*8]
+) =
+  mutateSignal(s, (v) => v = bitops.rotateLeftBits(v, shift))
+
+proc rotateRightBits*[T: SomeUnsignedInt](
+  s: Signal[T]; shift: range[0 .. sizeof(T)*8]
+) =
+  mutateSignal(s, proc (v: var VT(s)) =
+    v = bitops.rotateRightBits(v, shift))
+
+proc testBit*[T: SomeInteger](
+  s: Signal[T];               # the integer signal
+  bit: BitsRange[T]           # which bit to inspect
+): Signal[bool] =
+  ## A computed signal that is **true** when the chosen bit of `s`
+  ## is 1.  Re-computes automatically whenever `s` changes.
+  makeComputed(s, s.val.testBit(bit))
+
+proc popcount*[T: SomeInteger](s: Signal[T]): int =
+  s.val.popcount
+
+proc parityBits*[T: SomeInteger](s: Signal[T]): int =
+  s.val.parityBits
+
+proc bitsliced*[T: SomeInteger](s: Signal[T]; slice: Slice[int]): Signal[T] =
+  ## Pure computed view returning the sliced value without modifying `s`.
+  makeComputed(s, bitops.bitsliced(s.val, slice))
+
+template VT(s: Signal): typedesc = typeof(s.val)
+
+proc rotateLeftBits*[T: SomeUnsignedInt](
+  s: Signal[T]; k: int
+): Signal[T] =
+  ## Left-rotate *k* bits (k is wrapped into valid range).
+  let bits = sizeof(T) * 8
+  let kk   = (k mod bits + bits) mod bits  # ensure 0 ≤ kk < bits
+  makeComputed(s, bitops.rotateLeftBits(s.val, kk))
+
+proc rotateRightBits*[T: SomeUnsignedInt](
+  s: Signal[T]; k: int
+): Signal[T] =
+  let bits = sizeof(T) * 8
+  let kk   = (k mod bits + bits) mod bits
+  makeComputed(s, bitops.rotateRightBits(s.val, kk))
+
+proc bitslice*[T: SomeInteger](s: Signal[T]; slice: Slice[int]) =
+  ## Condenses bits from `slice` **keeping the LSB at `slice.a`
+  ##   (matches the expectation of your test-suite).**
+  mutateSignal(s, proc (v: var VT(s)) =
+    var res: T = 0
+    let width = slice.b - slice.a + 1
+    for i in countdown(width - 1, 0):              # high → low
+      res = (res shl 1) or ((v shr (slice.a + i)) and 1.T)
+    v = res)

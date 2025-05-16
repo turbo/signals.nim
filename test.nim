@@ -2496,3 +2496,153 @@ suite "bitops / signal integration":
     check log == @[true]
     flags.flipBit 4'u8
     check log[^1] == false
+
+  test "mask / unmask range":
+    let C = newReactiveCtx()
+    var n = C.signal 0b1111_0000'u8
+    n.mask(0 .. 3)
+    check n.val == 0'u8
+    n.setMask(1 .. 2)
+    check n.val == 0b0000_0110
+    n.flipMask(1 .. 2)
+    check n.val == 0b0000_0000
+
+  test "flipMask and undo":
+    let C = newReactiveCtx()
+    var flags = C.signal 0b1111_1111'u8
+    flags.flipMask(4 .. 6)       # -> 0b1000_1111
+    check flags.val == 0b1000_1111'u8
+    undo C
+    check flags.val == 0b1111_1111'u8
+
+  test "bitslice condenses value":
+    let C = newReactiveCtx()
+    var x = C.signal 0b1011_0100'u8       # 0xB4
+    x.bitslice(2 .. 6)
+    check x.val == 0b01101'u8
+
+
+suite "Reactive vs std/bitops parity":
+
+  # If mkPair is already defined elsewhere just remove the proc below.
+  proc mkPair[T](init: T): (Signal[T], T) =
+    let C = newReactiveCtx()
+    (C.signal init, init)
+
+  # ──────────────────────────────────────────────────────────────────────────
+  test "mask / unmask parity":
+    let (r, _) = mkPair(uint8 0b1100_0011)   # r is a Signal[uint8]
+    var plain  = uint8 0b1100_0011
+
+    # mask range 2..5
+    plain.mask(2 .. 5)
+    r.mask(2 .. 5)
+    check r.val == plain
+
+    # unmask (clearMask) same range
+    plain.clearMask(2 .. 5)
+    r.clearMask(2 .. 5)
+    check r.val == plain
+
+  test "set / clear / flip single bits":
+    let (r, _) = mkPair(uint8 0)
+    var plain  = uint8 0
+
+    for bit in 0u8 ..< 8u8:
+      plain.setBit bit
+      r.setBit   bit
+      check r.val == plain
+
+      plain.clearBit bit
+      r.clearBit   bit
+      check r.val == plain
+
+      plain.flipBit bit
+      r.flipBit   bit
+      check r.val == plain
+
+  test "bitslice parity (all byte‑slices)":
+    let (r0, _) = mkPair(uint8 0b1011_0100)
+    let plain0  = uint8 0b1011_0100
+
+    for lo in 0 .. 7:
+      for hi in lo .. 7:
+        # create an *independent* signal each turn
+        var r = C.signal(uint8 0b1011_0100)
+        var plain = uint8 0b1011_0100
+        r.bitslice(lo .. hi)
+        plain.bitslice(lo .. hi)
+        check r.val == plain
+
+  test "rotateLeftBits / rotateRightBits parity":
+    let (r0, _) = mkPair(uint16 0b0011_1100_1100_0011)
+    let plain0  = uint16 0b0011_1100_1100_0011
+
+    for rot in 0 ..< 16:
+      var r     = r0
+      var plain = plain0
+
+      r.set rotateLeftBits(r.val, rot)
+      plain = rotateLeftBits(plain, rot)
+      check r.val == plain
+
+      r.set rotateRightBits(r.val, rot)
+      plain = rotateRightBits(plain, rot)
+      check r.val == plain
+
+  test "testBit parity & reactivity":
+    let C = newReactiveCtx()
+    var flags = C.signal uint8 0b0101_0001
+    var plain = uint8 0b0101_0001
+
+    let bit2 = flags.testBit(2'u8)
+    let bit6 = flags.testBit(6'u8)
+
+    var log2, log6: seq[bool]
+    C.effect(proc() = log2.add bit2.val) # false
+    C.effect(proc() = log6.add bit6.val) # true
+
+    # initial parity
+    check bit2.val == plain.testBit(2'u8)
+    check bit2.val == false
+    check bit6.val == plain.testBit(6'u8)
+    check bit6.val == true
+
+    # flip both bits
+    flags.flipBit 2'u8 # false -> true
+    flags.flipBit 6'u8 # true -> false
+
+    plain.flipBit 2'u8 # false -> true
+    plain.flipBit 6'u8 # true -> false
+
+    # parity again
+    check bit2.val == plain.testBit(2'u8)
+    check bit2.val == true
+    check bit6.val == plain.testBit(6'u8)
+    check bit6.val == false
+
+    # effect logs prove reactivity
+    check log2 == @[false, true]
+    check log6 == @[true, false]
+
+  test "mask / unmask parity":
+    var (r, plain) = mkPair(uint8 0b1100_0011)
+    for sl in @[0..3, 2..5, 1..6]:
+      r.mask(sl);     plain.mask(sl);        check r.val == plain
+      r.setMask(sl);  plain.setMask(sl);     check r.val == plain
+      r.clearMask(sl);plain.clearMask(sl);   check r.val == plain
+      r.flipMask(sl); plain.flipMask(sl);    check r.val == plain
+
+  test "set / clear / flip single bits":
+    var (r, plain) = mkPair(uint8 0)
+    for b in 0u8 .. 7u8:
+      r.setBit(b);    plain.setBit(b);    check r.val == plain
+      r.flipBit(b);   plain.flipBit(b);   check r.val == plain
+      r.clearBit(b);  plain.clearBit(b);  check r.val == plain
+
+  test "bitslice parity (all byte-slices)":
+    for a in 0 .. 6:
+      for b in a .. 7:
+        var (r, plain) = mkPair(uint8 0b1011_0100)
+        r.bitslice(a..b);   plain.bitslice(a..b)
+        check r.val == plain
