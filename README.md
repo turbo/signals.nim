@@ -26,7 +26,7 @@ To use signals, just copy signals.nim into your project. It has no dependencies.
 
 ## Documentation
 
-Take a look at the [quick-start examples](/examples.nim) or read the full API reference at TBD.
+Take a look at the [quick-start examples](/examples.nim) or read the **[full API reference here](https://turbo.github.io/signals.nim/signals.html)**.
 
 ## Development
 
