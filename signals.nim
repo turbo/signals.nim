@@ -1,0 +1,2046 @@
+##[
+# Signals - Durable Reactive Effects for Nim
+
+This module implements *signals* and a lightweight runtime that keeps
+values, collections, and whole object graphs in sync automatically.
+The key ideas and how they fit together are outlined below. Each concept
+links to the concrete API symbol that realises it.
+
+***Signals***
+
+* A `Signal`_ stores one value of type `T` and remembers every observer
+  that reads it through `val`_ (or wrapper access).  
+* Writing with `set`_ records an undo entry, notifies observers via the
+  active scheduler, and marks the context dirty for autosave.
+
+***Derived values***
+
+* `computed`_ builds a new signal from other signals and caches the
+  result until any dependency changes.  
+* `memo`_ offers the same caching but exposes a plain callable instead
+  of a signal.  
+* `effect`_ and its cleanup variant run side effects when dependencies
+  change, while `effectOnce`_ runs exactly one time.
+
+***Batching and atomic updates***
+
+* `transaction`_ temporarily increments `ctx.batching`. Every signal
+  write inside the block queues notifications and coalesces history
+  so observers and autosave fire only once after the outermost
+  transaction ends.
+
+***Undo and redo***
+
+* Each effective change pushes a `HistoryEntry`_ onto the undo stack.  
+* `undo`_ pops entries, calls their undo callback, and moves them to the
+  redo stack; `redo`_ moves them back.  
+* `snapshot`_ captures the current depth and `travel`_ jumps to any
+  snapshot by replaying the needed undo or redo steps.  
+* `undoDepth`_ and `redoDepth`_ report the current stack sizes.
+
+***Persistence***
+
+* Any signal can be registered with `store`_ or `registerStore`_.  
+* `saveState`_ serialises all store signals into a flat JSON object;  
+  `loadState`_ restores them.  
+* `enableAutosave`_ / `disableAutosave`_ write one snapshot per flush
+  automatically.
+
+***Containers***
+
+* `ReactiveSeq`_ wraps a `seq`. Index access returns element signals;
+  structural mutators update `len`_ and `rev`_.  
+* `ReactiveTable`_ wraps a `Table`. Key access returns value signals and
+  structural edits update `len`_ and `rev`_ for the table.
+
+***Object wrappers***
+
+* The `reactive`_ macro generates a parallel `XReactive` type whose
+  fields are signals or nested reactive wrappers.  
+* `toReactive`_ converts a plain object or collection into its wrapper;
+  `toPlain`_ returns an immutable deep copy.
+
+***Schedulers***
+
+* The default immediate scheduler runs reactions at once.  
+* `useQueuedScheduler`_ queues reactions until `flushQueued`_ is called.  
+* `useFrameScheduler`_ batches reactions per render frame.
+
+***Context lifecycle***
+
+* All reactive entities belong to a `ReactiveCtx`_.  
+* Create one with `newReactiveCtx`_, dispose it with `dispose`_.  
+* After disposal signal writes still change the stored value but no
+   reactions, history entries, or autosave snapshots are produced
+]##
+
+import std/[
+  sugar,
+  hashes,
+  strutils,
+  tables,
+  sets,
+  json,
+  sequtils,
+  macros
+]
+
+type
+  StoreEntry = object
+    key: string
+    getter: proc(): JsonNode
+    setter: proc(n: JsonNode)
+
+  HistoryEntry* = tuple[undo, redo: proc()] ## \
+    ## Internal record used by the undo/redo system.
+    ##
+    ## A `HistoryEntry` stores two zero-argument procs:
+    ##
+    ## * `undo`  – restores the previous state.
+    ## * `redo`  – reapplies the change that `undo` reverted.
+    ##
+    ## The reactive engine pushes one `HistoryEntry` onto the context’s
+    ## undo stack for every *effective* state change that occurs outside of
+    ## an explicit call to `undo`, `redo`, or `dispose`.
+    ##
+    ## ***How it fits in***
+    ## 
+    ## * `undo(ctx)` pops an entry, calls `undo`, and pushes the same entry
+    ##   onto the redo stack.
+    ## * `redo(ctx)` pops from the redo stack, calls `redo`, and pushes the
+    ##   entry back onto the undo stack.
+    ##
+    ## ***When to interact with it***
+    ## 
+    ## End-users do not create `HistoryEntry` values directly. They appear
+    ## only if you are extending the library with new reactive container
+    ## types and need to record structural or batched changes. In that case
+    ## create an entry and push it just like the built-in seq and table
+    ## wrappers do.
+    ##
+    ## ***Pitfalls***
+    ## 
+    ## * The procs must **not** capture values by reference that can go out of
+    ##   scope before the entry is executed.
+    ## * Do not call signal setters inside `undo` or `redo` that would push
+    ##   *new* history entries; set the raw field values instead or wrap the
+    ##   call inside `ctx.isUndoing` / `ctx.isRedoing`.
+
+
+  ReactiveCtx* = ref object ## \
+    ## A runtime container that owns and orchestrates every reactive entity in
+    ## one isolated graph.
+    ##
+    ## ***Purpose***
+    ##
+    ## Each `ReactiveCtx` keeps its own signals, effects, scheduler, undo/redo
+    ## history, and autosave target. Creating more than one context lets you
+    ## run independent reactive sub-systems side by side.
+    ##
+    ## ***Key responsibilities***
+    ##
+    ## - Stores all signals created with `signal(ctx, ...)` and wrappers built
+    ##   with `ctx.toReactive(...)`.
+    ## - Queues and flushes reactions according to the active scheduler
+    ##   (immediate, queued, or frame).
+    ## - Batches changes while inside `transaction(ctx): ...`.
+    ## - Records `HistoryEntry` objects so that `undo` and `redo` can travel
+    ##   through time.
+    ## - Handles autosave by calling `saveInto` once per flush when dirty.
+    ## - Shuts everything down and runs pending cleanups when `dispose(ctx)`
+    ##   is called.
+    ##
+    ## ***Typical usage***
+    ##
+    ## ```nim
+    ## let ctx = newReactiveCtx()
+    ## var hp  = signal(ctx, 100)
+    ## effect(ctx, () => echo hp.val)
+    ## hp -= 10            # effect prints 90
+    ## ```
+    ##
+    ## Most programs keep one long-lived context. Tests, modal dialogs, or
+    ## background jobs often create short-lived contexts so they can dispose
+    ## them cleanly.
+    ##
+    ## ***When to create multiple contexts***
+    ##
+    ## - You need separate undo/redo stacks.
+    ## - Different parts of the app should flush on different schedulers.
+    ## - Large data sets need to be unloaded and all reactive memory freed at
+    ##   once via `dispose`.
+    ##
+    ## ***Pitfalls and rules***
+    ##
+    ## - Never move a signal between contexts; create it in the context that
+    ##   will own it.
+    ## - After `dispose(ctx)` reactions stop, but raw `Signal` values can still
+    ##   mutate silently; avoid further writes.
+    ## - Make sure every `transaction` block leaves `ctx.batching` back at 0
+    ##   even on exceptions.
+    ## - Public helpers (`signal`, `computed`, `effect`, ...) expect a valid,
+    ##   live context; passing a disposed one is a logic error.
+
+    batching: int      # nesting depth of `transaction`
+    isUndoing: bool
+    isRedoing: bool
+    isDisposed: bool
+    queue: seq[proc ()]
+    queueHashes: HashSet[Hash]
+    scheduler: proc (cb: proc())
+    currentObserver: proc ()
+    undoStack: seq[HistoryEntry]
+    redoStack: seq[HistoryEntry]
+    store: seq[StoreEntry]      # all persisted signals
+    dirty: bool                 # true after any real write
+    autoTarget: JsonNode        # points to caller-owned node
+    autoEnabled: bool
+    framePending: bool
+
+  Cleanup* = proc () ## \
+    ## Zero-argument callback that releases a resource previously created by an
+    ## `effect`. A `Cleanup` is registered through the `AddCleanup` callback
+    ## passed to `effect` (see that doc comment for usage details) and is
+    ## executed right before the effect runs again or when the owning
+    ## `ReactiveCtx` is disposed.
+    ##
+    ## Typical tasks performed in a `Cleanup`:
+    ## * clearing timers
+    ## * unbinding event listeners
+    ## * closing files or sockets
+    ##
+    ## Keep the body idempotent and side-effect free beyond the intended
+    ## teardown; it may be called even when signal values did not change if the
+    ## effect re-evaluates for other reasons.
+
+  AddCleanup* = proc (c: Cleanup) ## \
+    ## Type alias for the *onCleanup* callback that can be passed to `effect`.
+    ##
+    ## A cleanup is a `proc ()` that will be executed **right before** the
+    ## enclosing effect runs again or when its `ReactiveCtx` is disposed. Use
+    ## it to tear down timers, event handlers, or other external resources that
+    ## the effect created.
+    ##
+    ## ***Workflow***
+    ##
+    ## ```nim
+    ## ctx.effect proc (onCleanup: AddCleanup) =
+    ##   let timer = setTimer(1000, step)    # acquire resource
+    ##   onCleanup(() => clearTimer(timer)   # release it next run / dispose
+    ## )
+    ## ```
+    ##
+    ## * The effect runs once, establishing its dependencies.
+    ## * `onCleanup` registers any number of callbacks.
+    ## * Before the effect re-executes, each callback is invoked in the **order
+    ##   they were added**.
+    ##
+    ## ***When to use***
+    ## 
+    ## * Setting up and tearing down external listeners (DOM, sockets, timers).
+    ## * Releasing memory or file handles that live only for the lifetime of
+    ##   the effect.
+    ##
+    ## ***Pitfalls***
+    ## 
+    ## * **Do not** call `onCleanup` conditionally inside loops; register once
+    ##   per resource or you may leak callbacks.
+    ## * A cleanup runs even if the signal values did not actually change, as
+    ##   long as the effect re-evaluates; design idempotent cleanup code.
+    ## * Calling `dispose(ctx)` triggers cleanups exactly once; further writes
+    ##   to the same signals will no longer schedule cleanups.
+
+
+  Signal*[T] = ref object ## \
+    ## Reactive value container that stores one `T` and notifies its
+    ## subscribers when the value changes.
+    ##
+    ## ***Purpose***
+    ##
+    ## A `Signal` is the basic building block of the library. All primitive
+    ## fields wrapped by `reactive(MyType)` become signals. Effects and
+    ## computed signals read them to establish dependencies, and any call to
+    ## `set` triggers the update chain.
+    ##
+    ## ***Core behavior***
+    ##
+    ## - Read with `.val` or the `val(signal)` template.
+    ## - Write with `set`, `+=`, `-=`, or `*=`.
+    ## - Equality helpers let you compare a signal to a plain value in
+    ##   assertions.
+    ## - If the new value equals the current one no history entry is recorded
+    ##   and no reactions fire.
+    ## - Writes inside `undo`, `redo`, or `dispose` bypass history push but
+    ##   still notify dependants.
+    ##
+    ## ***Typical usage***
+    ##
+    ## ```nim
+    ## var hp = signal(ctx, 100)
+    ## effect(ctx, () => echo "HP:", hp.val)
+    ## hp -= 10            # effect prints HP: 90
+    ## ```
+    ##
+    ## ***When to declare a Signal yourself***
+    ##
+    ## - Stand-alone values not part of a reactive object wrapper.
+    ## - Global settings that require independent undo history.
+    ## - Quick experiments or tests where a full wrapper type is overkill.
+    ##
+    ## ***Pitfalls and rules***
+    ##
+    ## - Never create a signal without passing the owning `ReactiveCtx`.
+    ## - Avoid writing the same value repeatedly; it adds no benefit but still
+    ##   triggers change detection.
+    ## - Signals are reference types; copying a `Signal[T]` variable copies the
+    ##   reference, not the value.
+    ## - After `dispose(ctx)` writing a signal mutates the stored value but no
+    ##   reactions will run.
+    value: T
+    subs: seq[proc ()]
+    ctx: ReactiveCtx
+    setter: proc(v: T)
+
+  ReactiveSeq*[T] = ref object ## \
+    ## A signal-aware wrapper around a Nim `seq[T]`. Every element is stored in
+    ## its own `Signal[T]`, and structural edits (push, insert, remove, clear)
+    ## are tracked so effects can depend on the length or on the existence of
+    ## elements.
+    ##
+    ## ***Purpose***
+    ##
+    ## Use `ReactiveSeq` when you need a growable list whose *structure and
+    ## element values* both drive reactive updates. Structural changes push
+    ## history items, participate in transactions, and trigger autosave just
+    ## like normal signal writes.
+    ##
+    ## ***Core behavior***
+    ##
+    ## - Index access `rs[i]` returns the **element signal**; read or write it
+    ##   with `.val` or `set`. 
+    ## - `len(rs)` and `rev(rs)` are signals that change when the length or
+    ##   structure changes. 
+    ## - Structural mutators: `push`, `pop`, `insert`, `removeIdx`, `clear`. 
+    ## - Value writes on an element signal do **not** change `len` but do push
+    ##   their own undo record. 
+    ## - Inside a `transaction` multiple structural edits coalesce into one
+    ##   `HistoryEntry`.
+    ##
+    ## ***Typical usage***
+    ##
+    ## ```nim
+    ## var rs = ctx.toReactive(@["a", "b"])   # wrap an existing seq
+    ##
+    ## effect(ctx, () => echo "count:", len(rs))
+    ##
+    ## rs.push "c"        # effect prints count:3
+    ## rs[0].set "A"      # structural len unchanged
+    ## undo(ctx)          # removes "c"
+    ## ```
+    ##
+    ## ***When to choose ReactiveSeq***
+    ##
+    ## - Lists in UI state (inventory items, chat messages, menu entries). 
+    ## - Any ordered collection where individual items update independently. 
+    ## - You need fine-grained undo/redo that distinguishes structural vs
+    ##   value edits.
+    ##
+    ## ***Pitfalls and rules***
+    ##
+    ## - Keep references to element signals (`let s = rs[0]`) only while the
+    ##   element exists; deleting the index orphanes the signal. 
+    ## - Writing `rs[i] = v` when `i` is out of range is a logic error. 
+    ## - Large loops that write many elements individually should be wrapped in
+    ##   `transaction(ctx)` to avoid hundreds of history entries. 
+    ## - `iterator items(rs)` yields plain values, so no dependency is tracked;
+    ##   use explicit index reads if you need reactivity inside loops.
+    data: seq[Signal[T]]   # each element is its own signal
+    ctx: ReactiveCtx
+    lenS: Signal[int]      # dependency anchor: length
+    pendingOld: seq[Signal[T]]
+    pendingActive: bool
+
+  ReactiveTable*[K, V] = ref object ## \
+    ## Reactive wrapper around a `Table[K, V]`. Each key maps to its own
+    ## `Signal[V]`, and structural edits are tracked so effects can depend on
+    ## the entry count or on changes to the key set.
+    ##
+    ## ***Purpose***
+    ##
+    ## Use `ReactiveTable` when you need a dictionary whose keys may appear or
+    ## disappear at runtime and whose values must update dependent code
+    ## automatically. Both structural operations and per value writes
+    ## integrate with undo, redo, transactions, and autosave.
+    ##
+    ## ***Core behavior***
+    ##
+    ## - `rt[key]` returns the value signal for that key, creating a new signal
+    ##   with `default(V)` if the key is missing.
+    ## - `len(rt)` and `rev(rt)` are signals that change when the size or the
+    ##   structure changes.
+    ## - Structural mutators: `put`, `delKey`, `clear`.
+    ## - Writing through a value signal (`rt["hp"].set 10`) leaves `len`
+    ##   unchanged but records its own history entry.
+    ## - Inside `transaction(ctx)` multiple structural edits collapse into one
+    ##   undo record.
+    ##
+    ## ***Typical usage***
+    ##
+    ## ```nim
+    ## var stats = ctx.toReactive(initTable[string,int]())
+    ##
+    ## effect(ctx, () => echo "entries:", len(stats))
+    ##
+    ## stats.put("hp", 10)     # effect prints entries:1
+    ## stats["hp"] += 5        # structural length unchanged
+    ## undo(ctx)               # removes key "hp"
+    ## ```
+    ##
+    ## ***When to choose ReactiveTable***
+    ##
+    ## - Keyed collections in UI or game state, like entity maps or settings.
+    ## - You need both value level and structural level undo and redo.
+    ## - Autosave should persist a whole dictionary without manual loops.
+    ##
+    ## ***Pitfalls and rules***
+    ##
+    ## - Keep references to value signals only while the key exists; deleting
+    ##   the key leaves the old signal orphaned.
+    ## - Accessing `rt[key]` for a missing key creates it; use `hasKey` on a
+    ##   plain table if you only want to test for existence.
+    ## - Large batches of `put` or `delKey` should be wrapped in
+    ##   `transaction(ctx)` to avoid many history entries.
+    ## - Remember to read `len(rt)` or `rev(rt)` inside an effect if that
+    ##   effect should rerun on structural changes.
+    data: Table[K, Signal[V]]   # value signal per key
+    ctx: ReactiveCtx
+    lenS: Signal[int]           # entry count
+    revS: Signal[int]           # any structural change
+    pendingOld: Table[K, Signal[V]]
+    pendingActive: bool
+
+proc markDirty(ctx: ReactiveCtx)
+
+proc newReactiveCtx*(): ReactiveCtx =
+  ## Constructs and returns a fresh `ReactiveCtx` with the default immediate
+  ## scheduler and empty history, queues, and store list.
+  ##
+  ## ***When to call***
+  ##
+  ## - At application startup to create the primary reactive graph.
+  ## - Inside tests or short-lived components to obtain an isolated context
+  ##   that can be disposed without affecting the rest of the program.
+  ##
+  ## The new context is clean: `undoDepth`, `redoDepth`, and `queue.len`
+  ## are all zero, `isDisposed` is false, and autosave is disabled.
+
+  new result
+  result.scheduler = proc(cb: proc()) = cb()
+  result.queue = @[]
+  result.queueHashes = initHashSet[Hash]()
+  result.store = @[]
+  result.dirty = false
+  result.autoTarget = nil
+  result.autoEnabled = false
+  result.framePending = false
+
+proc signal*[T](ctx: ReactiveCtx, v: T): Signal[T] =
+  ## Allocates a new `Signal[T]` owned by `ctx` and initialised to `v`.
+  ##
+  ## ***Why you need it***
+  ##
+  ## - Stand-alone reactive values that are not part of a `reactive(...)`
+  ##   object wrapper.
+  ## - Global settings or counters that several wrappers or effects share.
+  ## - Quick prototypes or tests where defining a wrapper type is overkill.
+  ##
+  ## - Can be read (`sig.val`) inside `effect`, `computed`, or `memo` to
+  ##   establish dependencies that rerun those constructs when the signal
+  ##   changes.
+  ## - Can be registered for persistence with `store` or `registerStore`;
+  ##   autosave and `saveState` will then serialise its value.
+  ## - All writes made through `set` integrate with undo/redo, transactions,
+  ##   autosave, and the active scheduler as described for `set`.
+  ##
+  ## ***Typical workflow***
+  ##
+  ## ```nim
+  ## let ctx = newReactiveCtx()
+  ## var score = signal(ctx, 0)
+  ## effect(ctx, () => echo "score:", score.val)
+  ## score += 10          # effect prints score: 10
+  ## ```
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - A `Signal` is a reference object; copying the variable copies only the
+  ##   reference, not the value.
+  ## - Signals must belong to exactly one context; never share the same
+  ##   signal instance across contexts.
+  ## - After `dispose(ctx)` creating new signals with that context or writing
+  ##   existing ones is a logic error that yields no reactive behaviour.
+
+  Signal[T](value: v, ctx: ctx)
+
+proc decode[T](n: JsonNode): T =
+  when T is int:      result = n.getInt
+  elif T is float:    result = n.getFloat
+  elif T is string:   result = n.getStr
+  elif T is bool:     result = n.getBool
+  else:
+    raise newException(ValueError, "Unsupported type for store signal")
+
+proc makeStoreEntry[T](key: string, s: Signal[T]): StoreEntry =
+  StoreEntry(
+    key: key,
+    getter: () => %(s.val),
+    setter: (n: JsonNode) => s.set decode[T](n)
+  )
+
+proc store*[T](ctx: ReactiveCtx, key: string, init: T): Signal[T] =
+  ## Creates a new signal initialised to `init`, registers it under `key`
+  ## for persistence, and returns the signal.  Future calls to `saveState`
+  ## or active autosave snapshots will serialize the signal’s value using
+  ## the same key in the JSON object.
+  ##
+  ## Typical use:
+  ##
+  ## ```nim
+  ## var gold = store(ctx, "gold", 100)
+  ## enableAutosave(ctx, saveNode)
+  ## gold += 50          # next flush writes {"gold":150}
+  ## ```
+
+  let s = signal(ctx, init)
+  ctx.store.add makeStoreEntry(key, s)
+  s
+
+proc registerStore*[T](ctx: ReactiveCtx, key: string, s: Signal[T]) =
+  ## Adds `s` to the context's store list under `key` so that future calls to
+  ## `saveState` or active autosave snapshots include its value. Can be
+  ## called at any time, even after autosave was already enabled.
+
+  ctx.store.add makeStoreEntry(key, s)
+
+proc saveInto(ctx: ReactiveCtx, dest: JsonNode) =
+  ## Overwrite `dest` with a flat object of all store entries.
+  ## `dest` **must not be nil**.
+  if dest.isNil: return                 ## nothing to mutate
+  ## clear existing keys
+  for k in toSeq(dest.keys): dest.delete k
+  ## fill with fresh snapshot
+  for e in ctx.store: dest[e.key] = e.getter()
+  ctx.dirty = false
+
+proc saveState*(ctx: ReactiveCtx, dest: var JsonNode) =
+  ## Writes a snapshot of all store-registered signals in `ctx` into `dest`.
+  ##
+  ## ***Rules***
+  ## - Allocates a new JSON object when `dest` is `nil`.
+  ## - Overwrites existing keys that match store entries; leaves others
+  ##   untouched.
+  ## - Does not clear history or fire reactions.
+  ##
+  ## Use before closing a document or for manual export; for continuous
+  ## persistence prefer `enableAutosave`.
+
+  if ctx.isDisposed: return
+  if dest.isNil: dest = newJObject()
+  saveInto(ctx, dest)
+
+proc loadState*(ctx: ReactiveCtx, src: JsonNode) =
+  ## Replaces the values of all store-registered signals in `ctx` with the
+  ## contents of `src`. Keys that are missing in `src` leave their signals
+  ## unchanged. Signals not registered with `store` or `registerStore` are
+  ## unaffected.
+  ##
+  ## ***Typical workflow***
+  ##
+  ## ```nim
+  ## var snapshot: JsonNode
+  ## saveState(ctx, snapshot)   # later...
+  ## loadState(ctx, snapshot)   # restore previous snapshot
+  ## ```
+  ##
+  ## ***Effects on history and reactions***
+  ##
+  ## - Each `setter` call triggered by `loadState` pushes its own undo record
+  ##   unless the context is inside `isUndoing`, `isRedoing`, or `isDisposed`.
+  ## - Reactions fire normally after the load; wrap the call in
+  ##   `transaction(ctx)` if you want one coalesced update.
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - `src` must not be `nil`; pass an empty object to clear all stored
+  ##   keys.  
+  ## - Data types are not validated beyond basic conversion; loading a float
+  ##   into an int signal raises a value error.  
+  ## - The redo stack is cleared after the first new write; if you load a
+  ##   snapshot and then set a signal manually the forward history is lost.
+
+  if ctx.isDisposed: return
+  for e in ctx.store:
+    if src != nil and src.hasKey(e.key):
+      e.setter(src[e.key])
+
+proc enableAutosave*(ctx: ReactiveCtx, target: var JsonNode) =
+  ## Activates automatic persistence for all store-registered signals in
+  ## `ctx`. The current values are written into `target` immediately and once
+  ## per flush whenever any store signal changes.
+  ##
+  ## ***How it works***
+  ##
+  ## - If `target` is `nil` a new empty JSON object is created.  
+  ## - Every call to `flushQueued(ctx)` (or an automatic flush by the
+  ##   scheduler) serialises the latest store snapshot into the same JSON
+  ##   node. Existing keys are overwritten, other keys in `target` remain.  
+  ## - On `dispose(ctx)` a final snapshot is written.
+  ##
+  ## ***Typical usage***
+  ##
+  ## ```nim
+  ## var doc: JsonNode
+  ## enableAutosave(ctx, doc)      # initial snapshot
+  ## gold += 10                    # mutate a store signal
+  ## flushQueued ctx               # doc updated
+  ## ```
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - Keep `target` alive as long as autosave is enabled; if you reassign
+  ##   the variable the library keeps the old reference.  
+  ## - Call `disableAutosave(ctx)` before switching to a new node to avoid
+  ##   unintentionally writing into both.  
+  ## - Immediate scheduler writes right away; queued or frame schedulers
+  ##   require an explicit flush or a frame tick.
+
+  if target.isNil:
+    target = newJObject()                 # allocate buffer
+
+  ctx.autoTarget = target
+  ctx.autoEnabled = true
+  ctx.dirty = true
+  saveInto(ctx, target)                   # initial snapshot
+
+proc disableAutosave*(ctx: ReactiveCtx) =
+  ## Turns off automatic persistence for the context. No further snapshots
+  ## are written to the JSON node that was previously passed to
+  ## `enableAutosave`.
+  ##
+  ## ***Effect***
+  ##
+  ## - Clears the autosave flag and the stored node reference.  
+  ## - Does not perform a final save; call `flushQueued(ctx)` first if you
+  ##   need the latest state persisted.
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - After disabling, edits to store signals will not reach the old JSON
+  ##   node unless autosave is enabled again or `saveState` is called
+  ##   manually.
+
+  ctx.autoEnabled = false
+  ctx.autoTarget = nil
+
+proc registerDep(s: Signal) =
+  let c = s.ctx
+
+  if c.currentObserver == nil: return
+  if c.currentObserver in s.subs: return
+  s.subs.add c.currentObserver
+
+template val*(s: Signal): untyped =
+  ## Expands to `s.value` and performs dependency tracking.
+  ##
+  ## When this template is used inside `effect`, `computed`, `memo`,
+  ## or `watch` the call runs through `registerDep(s)` first. That
+  ## records the **current observer callback** as a subscriber of
+  ## the signal, so any future `set` on the same signal will schedule
+  ## the observer to run again.
+  ##
+  ## ***Relationship to other helpers***
+  ##
+  ## - `val(s)`  (this template)  -> read **and** track  
+  ## - `peek(s)` -> read **without** tracking  
+  ##
+  ## Choose `val` when you want reactivity; choose `peek` when you only
+  ## need the value once during the current execution.
+  ##
+  ## ***Typical pattern***
+  ##
+  ## ```nim
+  ## ctx.effect proc =
+  ##   echo "HP:", hp.val, "/", maxHp.val   # both reads tracked
+  ## ```
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - Calling `val` outside an observer context (for example in plain
+  ##   top-level code) still works but adds no subscription; if the read
+  ##   must stay reactive place it in an effect or computed signal.  
+  ## - Reading inside a loop in an effect collects a dependency for every
+  ##   iteration. If the loop length can grow unbounded this may create a
+  ##   large subscriber list; consider using structural signals like
+  ##   `rev(rs)` instead.
+  registerDep s
+  s.value
+
+proc notifySubs[T](s: Signal[T]) =
+  let c = s.ctx
+
+  if c.batching < 1:
+    for cb in s.subs: c.scheduler cb
+    return
+
+  for cb in s.subs:
+    let h = hash(cb)
+    if h notin c.queueHashes:
+      c.queueHashes.incl h
+      c.queue.add cb
+
+proc set*[T](s: Signal[T], v: T) =
+  ## Writes a new value into a `Signal`.
+  ##
+  ## ***Purpose***
+  ##
+  ## This is the fundamental mutation primitive; every shortcut such as
+  ## `+=` or element‐signal writes eventually calls `set`.
+  ##
+  ## - **History**  
+  ##   Pushes one `HistoryEntry` that stores both the old and the new value,
+  ##   unless `ctx.isUndoing`, `ctx.isRedoing`, or `ctx.isDisposed` is true.
+  ##
+  ## - **Effects and computed signals**  
+  ##   All subscribers collected through dependency tracking are notified.
+  ##   The actual reaction runs immediately on the immediate scheduler or is
+  ##   queued for `flushQueued(ctx)` / the next frame on other schedulers.
+  ##
+  ## - **Transactions**  
+  ##   Inside `transaction(ctx)` several calls to `set` are coalesced: the
+  ##   history entry is created when the outermost transaction finishes and
+  ##   reactions fire once per flush, not per call.
+  ##
+  ## - **Autosave**  
+  ##   Marks the context dirty so the next flush (manual or scheduled) writes
+  ##   a snapshot when autosave is enabled.
+  ##
+  ## - **Writable computed signals**  
+  ##   When the target signal has a custom setter (`computed(..., setter=...)`)
+  ##   the call is forwarded there instead of storing into the signal’s own
+  ##   field, thus supporting virtual two-way bindings.
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - Writing the *same* value is ignored; no history entry, no reactions.
+  ## - Do not call `set` inside the getter of the same computed signal; that
+  ##   creates infinite recursion.
+  ## - After `dispose(ctx)` the value still mutates but no reactions, history
+  ##   entries, or autosave snapshots will be produced.
+
+
+  if s.setter != nil:
+    s.setter(v)
+    return                         # underlying signals push history
+
+  if s.value == v: return
+  let c = s.ctx
+
+  # undo / redo / disposed bypass (no history entry)
+  if c.isUndoing or c.isRedoing or c.isDisposed:
+    s.value = v
+    notifySubs s
+    markDirty c
+    return
+
+  # regular write (will push history)
+  let old = s.value
+  s.value = v
+
+  let entry: HistoryEntry = (
+    undo: () => s.set old,
+    redo: () => s.set v
+  )
+
+  c.undoStack.add entry
+  c.redoStack.setLen 0
+  notifySubs s
+  markDirty c
+
+template `$`*(s: Signal): untyped = s.val
+template `+=`*[T](s: Signal[T], d: T) = s.set s.val + d
+template `-=`*[T](s: Signal[T], d: T) = s.set s.val - d
+template `*=`*[T](s: Signal[T], d: T) = s.set s.val * d
+
+proc `==`*[T](a: Signal[T], b: T): bool = a.val == b
+proc `==`*[T](a: T, b: Signal[T]): bool = a == b.val
+
+proc computed*[T](
+  ctx: ReactiveCtx,
+  getter: proc(): T,
+  setter: proc(v: T) = nil
+): Signal[T] =
+  ## Creates a derived signal whose value is calculated by `getter`. The
+  ## result is cached and recomputed only when any signal read inside
+  ## `getter` has changed. If `setter` is supplied the computed signal
+  ## becomes writable; calling `set` or `pct.set(x)` forwards the write to
+  ## `setter`.
+  ##
+  ## ***How it fits in***
+  ##
+  ## - Use `computed` for values that can be expressed entirely in terms of
+  ##   other signals.  
+  ## - Effects depending on the computed signal see a single dependency
+  ##   instead of all the sources used inside `getter`.  
+  ## - Writable computed signals let you expose a convenient virtual field
+  ##   (for example percent health) that writes back to one or more base
+  ##   signals.
+  ##
+  ## ***Example***
+  ##
+  ## ```nim
+  ## let pct = computed(ctx,
+  ##   getter = () => hp.val.float / maxHp.val.float,
+  ##   setter = (p: float) => hp.set int(p * maxHp.val.float))
+  ##
+  ## echo pct.val   # read
+  ## pct.set 0.8    # write through setter
+  ## ```
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - `getter` runs immediately when `computed` is created; avoid heavy work
+  ##   or side effects inside it.  
+  ## - Do not call `set` on the computed signal from inside its own `getter`;
+  ##   that would cause infinite recursion.  
+  ## - If `setter` writes the same value back into the sources the engine
+  ##   detects no change and pushes no history entry.
+
+  let s = signal(ctx, getter())       # initial evaluation
+  s.setter = setter                   # attach (may be nil)
+
+  proc re() =
+    let nv = getter()
+    if nv != s.val:
+      ## temporarily silence the writable setter to avoid recursion
+      let saved = s.setter
+      s.setter = nil
+      s.set nv                         # push undo & notify
+      s.setter = saved
+
+  let prev = ctx.currentObserver
+  ctx.currentObserver = re
+  discard getter()                     # capture dependencies
+  ctx.currentObserver = prev
+  s
+
+proc effect*(ctx: ReactiveCtx, body: proc()) =
+  ## Registers `body` as a reactive side effect. The procedure runs once
+  ## immediately, collects every signal it reads, and is scheduled to run
+  ## again whenever any of those signals changes.
+  ##
+  ## ***Purpose***
+  ##
+  ## Effects are the bridge from reactive data to the outside world. Use them
+  ## for printing, updating the UI, sending network messages, or any work
+  ## whose result is not itself a signal.
+  ##
+  ## ***How it works***
+  ##
+  ## - During the first call `ctx.currentObserver` is set to the callback so
+  ##   every signal read registers the dependency automatically.  
+  ## - Later writes to any of those signals schedule the effect.  
+  ## - If the active scheduler is queued or frame based, the run happens on
+  ##   the next `flushQueued(ctx)` or frame tick.  
+  ## - Dependencies are re-collected on every run; if `body` stops reading a
+  ##   signal it will be unsubscribed.
+  ##
+  ## ***Example***
+  ##
+  ## ```nim
+  ## effect(ctx, proc () =
+  ##   echo "HP:", hp.val, "/", maxHp.val
+  ## )
+  ## ```
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - Do not mutate signals inside the same effect that reads them unless
+  ##   you are certain it will not cause infinite loops.  
+  ## - An effect runs even if the computed result is identical; add manual
+  ##   checks if you need extra deduplication.  
+  ## - Heavy work should be batched or throttled to avoid frame drops under
+  ##   rapid updates.
+
+  proc run =
+    let prev = ctx.currentObserver   # save
+    ctx.currentObserver = run        # point to myself
+    body()                           # collect dependencies
+    ctx.currentObserver = prev       # restore
+
+  run()
+
+proc effect*(ctx: ReactiveCtx, body: proc(onCleanup: AddCleanup)) =
+  ## Registers a reactive side effect that can schedule cleanup callbacks.
+  ## `body` receives an `onCleanup` function; every `Cleanup` registered with
+  ## it runs right before the effect re executes or when the context is
+  ## disposed.
+  ##
+  ## ***Purpose***
+  ##
+  ## Same as the simple `effect`, plus deterministic setup and teardown of
+  ## resources such as timers, event listeners, or file handles.
+  ##
+  ## ***Usage pattern***
+  ##
+  ## ```nim
+  ## effect(ctx, proc (onCleanup: AddCleanup) =
+  ##   let id = setTimer(1000, tick)
+  ##   onCleanup(() => clearTimer(id))
+  ## )
+  ## ```
+  ##
+  ## - First run: acquire resources, register cleanups, establish
+  ##   dependencies.  
+  ## - On every re run: all cleanups fire, then the body executes again.  
+  ## - On `dispose(ctx)`: any remaining cleanups run once.
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - Register each resource exactly once; adding inside loops can leak
+  ##   callbacks.  
+  ## - Cleanups run even when signal values did not change if the effect
+  ##   still re evaluates. Keep them lightweight and idempotent.  
+  ## - Avoid calling `onCleanup` conditionally based on signal values that
+  ##   may differ between runs; otherwise the number of callbacks can grow
+  ##   unbounded.
+
+  var cleanups: seq[Cleanup]
+
+  proc onCleanup(c: Cleanup) = cleanups.add c
+
+  proc run() =
+    for c in cleanups: c()
+    cleanups.setLen 0
+    let prev = ctx.currentObserver
+    ctx.currentObserver = run
+    body(onCleanup)                  # collect deps / register new cleanups
+    ctx.currentObserver = prev
+
+  run()
+
+proc flushQueued*(ctx: ReactiveCtx) =
+  ## Runs all reactions currently waiting in `ctx.queue` and then, if
+  ## autosave is enabled and the context is marked dirty, writes one snapshot
+  ## to the autosave JSON node.
+  ##
+  ## ***Purpose***
+  ##
+  ## Use `flushQueued` when working with the queued or frame schedulers if
+  ## you need to force updates immediately, or in automated tests where you
+  ## want deterministic timing without depending on the scheduler loop.
+  ##
+  ## ***What it does***
+  ##
+  ## - Copies the current queue, clears it, and executes each reaction once.  
+  ## - Clears `queueHashes` so the same reaction can be queued again later.  
+  ## - If autosave is active and any write happened since the last snapshot,
+  ##   serialises the store signals into the target JSON node.
+  ##
+  ## ***Typical usage***
+  ##
+  ## ```nim
+  ## useQueuedScheduler(ctx)
+  ## value.set 42       # effect is queued
+  ## flushQueued ctx    # run it right now
+  ## ```
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - Do not call inside a `transaction`; the batch is not finished until
+  ##   the outer transaction flushes.  
+  ## - Immediate scheduler users never need this call because reactions run
+  ##   at once.  
+  ## - Flushing very often defeats the coalescing benefit of queued schedulers.
+
+  if ctx.queue.len > 0:
+    let jobs = ctx.queue
+    ctx.queue = @[]
+    ctx.queueHashes.clear()
+    for cb in jobs: cb()
+
+  # autosave fires once per flush
+  if ctx.autoEnabled and ctx.dirty and ctx.autoTarget != nil:
+    saveInto(ctx, ctx.autoTarget)
+
+template transaction*(ctx: ReactiveCtx, body: untyped) =
+  ## Runs `body` while incrementing `ctx.batching`. Each nested call further
+  ## increments the counter. Reactions, history entries, and autosave writes
+  ## are suppressed until the counter returns to zero at the end of the
+  ## outermost transaction.
+  ##
+  ## ***What is coalesced***
+  ##
+  ## - **Signal writes** still update their stored value immediately but
+  ##   notifications go into `ctx.queue` instead of running right away.  
+  ## - **ReactiveSeq / ReactiveTable structural edits** save an *old* copy on
+  ##   the first mutation and postpone emitting their `HistoryEntry` until
+  ##   the commit phase. Multiple edits of the same container collapse into
+  ##   one entry.  
+  ## - **Undo/redo depth** therefore grows by at most one entry per distinct
+  ##   signal and one per structurally mutated container, no matter how many
+  ##   writes happened inside the block.
+  ##
+  ## ***Commit phase***
+  ##
+  ## When the outermost transaction exits (`ctx.batching` becomes zero) the
+  ## template:
+  ## 1. hands a flush request to the current scheduler  
+  ## 2. the scheduler later calls `flushQueued(ctx)` which  
+  ##    * executes queued reactions once each  
+  ##    * writes one autosave snapshot if dirty
+  ##
+  ## ***Example***
+  ##
+  ## ```nim
+  ## transaction(ctx):
+  ##   hp -= 10
+  ##   mana -= 5
+  ##   inv.push "potion"
+  ## # exactly one reaction run and one history record for inv
+  ## ```
+  ##
+  ## ***Nesting and exceptions***
+  ##
+  ## - Nested transactions simply increment the counter further; commit runs
+  ##   only when the outermost layer finishes.  
+  ## - The template uses `try/finally` so `ctx.batching` is decremented even
+  ##   if `body` raises. An exception aborts the commit; partial changes stay
+  ##   applied because the engine has no automatic rollback. Call `undo` in a
+  ##   custom catch block if you need an all-or-nothing effect.
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - Blocking `flushQueued(ctx)` inside the same frame when using a frame
+  ##   scheduler negates batching benefits.  
+  ## - Long running code inside `body` can delay reactions longer than users
+  ##   expect.
+
+  inc ctx.batching
+  try:
+    body
+  finally:
+    dec ctx.batching
+    if ctx.batching == 0:
+      # hand the flush to whatever scheduler is active
+      ctx.scheduler () => flushQueued ctx
+
+proc undo*(ctx: ReactiveCtx, steps = 1) =
+  ## Reverses the last `steps` history entries (default 1). For each step
+  ## the most recent `HistoryEntry` is popped from the undo stack, its
+  ## `undo` callback runs, and the entry is pushed onto the redo stack.
+  ## Reactions run after the batch and autosave marks the context dirty.
+  ## Calling `undo` when the stack is empty does nothing.
+
+  var n = steps
+  ctx.isUndoing = true
+  defer: ctx.isUndoing = false
+  transaction(ctx):
+    while n > 0 and ctx.undoStack.len > 0:
+      dec n
+      let e = ctx.undoStack.pop()
+      ctx.redoStack.add e        # save for redo
+      e.undo()
+
+proc redo*(ctx: ReactiveCtx, steps = 1) =
+  ## Travels forward in the undo history `steps` times (default 1).
+  ## Pops entries from the redo stack, executes their `redo` callbacks,
+  ## pushes them back onto the undo stack, and schedules reactions. Has no
+  ## effect when the redo stack is empty.
+
+  var n = steps
+  ctx.isRedoing = true
+  defer: ctx.isRedoing = false
+  transaction(ctx):
+    while n > 0 and ctx.redoStack.len > 0:
+      dec n
+      let e = ctx.redoStack.pop()
+      ctx.undoStack.add e        # restore in undo history
+      e.redo()
+
+proc undoDepth*(ctx: ReactiveCtx): int = 
+  ## Returns the number of `HistoryEntry` objects currently stored in the
+  ## undo stack of `ctx`. A quick way to decide whether an Undo button
+  ## should be enabled in the UI.
+  ctx.undoStack.len
+
+proc redoDepth*(ctx: ReactiveCtx): int = 
+  ## Returns the current size of the redo stack for `ctx`. Useful in
+  ## debugging UIs to enable or disable a 'Redo' button.
+  ctx.redoStack.len
+
+proc clearUndo*(ctx: ReactiveCtx) =
+  ## ***Purpose***
+  ##
+  ## Erases both the undo and redo stacks of the given context without
+  ## altering current state.
+  ##
+  ## ***When to call***
+  ##
+  ## - Before loading a fresh document or scene where old history should not
+  ##   apply.
+  ## - In tests that want to assert depth from a clean slate.
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - Users can no longer undo the edits made earlier in the session.
+  ## - Does not stop reactions; only history is cleared.
+
+  ctx.undoStack.setLen 0
+  ctx.redoStack.setLen 0
+
+proc markDirty(ctx: ReactiveCtx) =
+  ## 1. Set the dirty flag.
+  ## 2. If we are **not inside a transaction**, hand a flush to the
+  ##     currently-installed scheduler (immediate / queued / frame).
+  if ctx.isDisposed: return
+  ctx.dirty = true
+  if ctx.batching == 0:
+    ctx.scheduler () => flushQueued ctx
+
+# ─── snapshot & travel  -----------------------------------------------------
+proc snapshot*(ctx: ReactiveCtx): int =
+  ## Creates a checkpoint of the current undo position and returns its index.
+  ## Use the returned int later with `travel(ctx, index)` to jump back or
+  ## forward to this exact moment in history.  Snapshot indices grow
+  ## monotonically and are valid until the undo and redo stacks are cleared
+  ## or purged by `dispose(ctx)`.
+
+  ctx.undoStack.len
+
+proc travel*(ctx: ReactiveCtx, index: int) =
+  ## Jumps to the snapshot at `index`, the value previously returned by
+  ## `snapshot(ctx)`. If `index` is lower than the current undo depth the
+  ## call performs the required number of undo steps. If it is higher the
+  ## call performs redo steps. Out-of-range indices are ignored. Reactions
+  ## fire after the move and autosave updates on the next flush.
+
+  let cur = ctx.undoStack.len
+  if index < 0 or index > cur + ctx.redoStack.len: return
+  if index < cur:
+    undo(ctx, cur - index)
+  elif index > cur:
+    redo(ctx, index - cur)
+
+proc useQueuedScheduler*(ctx: ReactiveCtx) =
+  ## Switches to a simple queued scheduler.
+  ##
+  ## ***Behavior***
+  ##
+  ## - Every reaction triggered by a signal write is enqueued immediately.  
+  ## - Nothing runs until `flushQueued(ctx)` is called.  
+  ## - Multiple queued reactions are executed in the order they were added,
+  ##   duplicates are filtered by hash.
+  ##
+  ## ***When to use***
+  ##
+  ## - Unit tests that want deterministic timing without a frame loop.  
+  ## - Command-line tools that need to flush after processing a batch of
+  ##   input lines.  
+  ## - Situations where you need to guarantee that expensive work is delayed
+  ##   until an explicit sync point.
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - Forgetting to call `flushQueued(ctx)` causes reactions and autosave
+  ##   to accumulate indefinitely.
+
+  ctx.scheduler = proc(cb: proc()) =
+    let h = hash(cb)
+    if h notin ctx.queueHashes:
+      ctx.queueHashes.incl h
+      ctx.queue.add cb
+
+proc watch*[T](
+  ctx: ReactiveCtx,
+  selector: () -> T,
+  handler: proc(newVal, oldVal: T),
+  immediate = false
+) =
+  ## Observes the output of `selector` and calls `handler` whenever that
+  ## output changes.
+  ##
+  ## ***Workflow***
+  ##
+  ## 1. `selector` runs inside an internal effect, collecting dependencies
+  ##    and storing its result.  
+  ## 2. When any dependency changes the effect reruns; if the new result
+  ##    differs from the stored one `handler(new, old)` is invoked.  
+  ## 3. The stored result is updated to the new value.
+  ##
+  ## `immediate` controls whether the handler fires on the first evaluation.
+  ##
+  ## ***Use cases***
+  ##
+  ## - React when a numeric value crosses a threshold without caring about
+  ##   every intermediate change.  
+  ## - Run validation logic only when a composite selector result differs.  
+  ## - Trigger animations where only the final state of a batch matters.
+  ##
+  ## ***Example***
+  ##
+  ## ```nim
+  ## watch(ctx,
+  ##   selector = () => hp.val div 10,
+  ##   handler  = proc(new, old: int) =
+  ##     echo "tens digit changed from", old, "to", new,
+  ##   immediate = true)
+  ## ```
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - Selector results are compared with `!=`. For complex types ensure
+  ##   that this equality test reflects real changes.  
+  ## - If the selector performs heavy work consider wrapping it in `memo`
+  ##   first.  
+  ## - `handler` runs inside the same flush that detected the change; avoid
+  ##   long running code that blocks other reactions.
+
+  var first = true
+  var prev: T
+
+  ctx.effect proc =
+    let cur = selector()
+    if first:
+      first = false
+      if immediate:
+        handler(cur, cur) # fire right away
+      prev = cur
+    elif cur != prev:
+      let old = prev
+      prev = cur
+      handler(cur, old)
+
+template watchNow*[T](
+  ctx: ReactiveCtx,
+  selector: () -> T,
+  handler: proc(newVal, oldVal: T)
+) =
+  ## Shorthand for `watch` with `immediate = true`. Runs `selector`
+  ## immediately, stores the result, invokes `handler(new, new)` once, and
+  ## then behaves like `watch`, calling `handler(new, old)` whenever the
+  ## selector’s output changes.
+  ##
+  ## Helpful for loading indicators or log statements that should fire right
+  ## away and on every subsequent change without writing two separate calls.
+  watch(ctx, selector, handler, true)
+
+proc dumpDeps*(s: Signal): seq[string] =
+  ## Return a seq of hex strings, one per subscriber callback.
+  ## Helpful for quick "who depends on this signal?" debugging.
+  for cb in s.subs:
+    result.add hash(cb).int.toHex()
+
+proc dispose*(ctx: ReactiveCtx) =
+  ## Stops all reactive activity owned by `ctx` and frees its resources.
+  ##
+  ## ***What happens***
+  ##
+  ## - If autosave is active a final snapshot is written before shutdown.  
+  ## - Pending reaction queues and history stacks are cleared.  
+  ## - Scheduler is replaced with a no-op and `currentObserver` is set to
+  ##   nil, so no further reactions run.  
+  ## - `ctx.isDisposed` becomes true; helper procs treat the context as dead.
+  ##
+  ## ***Typical usage***
+  ##
+  ## ```nim
+  ## let ctx = newReactiveCtx()
+  ## ...
+  ## dispose ctx      # when the data set or UI panel is closed
+  ## ```
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - Writing to a signal after disposal mutates its raw value but triggers
+  ##   no reactions or autosave.  
+  ## - A disposed context cannot be revived. Create a new context instead.  
+  ## - Transactions open at the moment of disposal are silently cancelled.
+
+  if ctx.autoEnabled and ctx.dirty and ctx.autoTarget != nil:
+    saveInto(ctx, ctx.autoTarget)
+
+  ctx.isDisposed = true
+  ctx.queue.setLen 0
+  ctx.undoStack.setLen 0
+  ctx.scheduler = (cb: proc()) => (discard)   # no-op
+  ctx.currentObserver = nil
+  ctx.batching = 0
+
+proc memo*[T](
+  ctx: ReactiveCtx,
+  selector: () -> T
+): () -> T =
+  ## Creates a memoised selector. The returned closure reads its cached value
+  ## without tracking dependencies, while an internal effect keeps that cache
+  ## up to date by running `selector` again only when any of the signals it
+  ## reads change.
+  ##
+  ## ***Purpose***
+  ##
+  ## Use `memo` to avoid expensive recalculation or to expose a selector that
+  ## can be read many times without causing additional reactivity churn.
+  ##
+  ## ***How it works***
+  ##
+  ## - On creation `selector` runs once, collects its dependencies, and
+  ##   stores the result.  
+  ## - An internal effect reruns `selector` when any dependency changes and
+  ##   updates the cache.  
+  ## - The returned closure just returns the current cache, adding itself as
+  ##   a dependency of callers.
+  ##
+  ## ***Example***
+  ##
+  ## ```nim
+  ## let sum = memo(ctx, () => a.val + b.val)
+  ## echo sum()   # fast cached read
+  ## ```
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - Do not call `memo` inside another effect if the selector performs
+  ##   heavy work; create it once at module or context setup time.  
+  ## - Values are compared with `!=`; if `T` has complex equality rules make
+  ##   sure that still detects real changes.  
+  ## - The memo itself never pushes undo history; only the underlying signal
+  ##   writes do.
+
+  let sig = signal(ctx, default(T))    # cache
+  var first = true
+
+  ctx.effect proc =
+    let nv = selector()
+    if first or nv != sig.value:
+      first = false
+      sig.value = nv          # direct write → no history, no recursion
+      notifySubs sig          # wake dependants manually
+
+  proc: T =
+    registerDep sig
+    sig.value
+
+template peek*[T](s: Signal[T]): untyped =
+  ## Reads a signal’s current value without registering a dependency.
+  ## Useful inside effects when you need the data but do not want the effect
+  ## to rerun on future changes.
+  ##
+  ## ```nim
+  ## effect(ctx, () =>
+  ##   echo "debug:", peek(hp)   # prints once, never reruns
+  ## )
+  ## ```
+
+  block:
+    let inPrev = s.ctx.currentObserver   # save
+    s.ctx.currentObserver = nil         # silence tracking
+    let tV = s.value                    # raw read
+    s.ctx.currentObserver = inPrev       # restore
+    tV                                  # ⇐ result
+
+proc effectOnce*(ctx: ReactiveCtx, body: proc()) =
+  ## Executes `body` immediately and never schedules it again, even if the
+  ## procedure reads signals that later change. Dependency tracking is
+  ## disabled during the call.
+  ##
+  ## ***Purpose***
+  ##
+  ## Use `effectOnce` for one time side effects such as logging, initialising
+  ## third party libraries, or writing a first snapshot after startup.
+  ##
+  ## ***Example***
+  ##
+  ## ```nim
+  ## effectOnce(ctx, proc () =
+  ##   echo "Initial HP:", hp.val
+  ## )
+  ## ```
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - Because no dependencies are collected, later updates do not trigger
+  ##   the procedure. Choose a normal `effect` if you need ongoing reactivity.
+  ## - Cleanups cannot be registered; allocate resources only if they live
+  ##   for the full lifetime of the context.
+
+  let saved = ctx.currentObserver
+  ctx.currentObserver = nil    # disable dependency collection
+  body()                       # one-shot side-effect
+  ctx.currentObserver = saved
+
+proc isPrimitive*(n: NimNode): bool =
+  ## Returns `true` if `n` represents one of the built-in scalar types
+  ## supported by the `reactive` macro (int, float, bool, string, etc.).
+  ## Used internally when generating wrapper fields to decide whether a
+  ## source field should become a simple `Signal` or a nested reactive
+  ## wrapper. Application code rarely needs this helper.
+
+  (n.kind in {nnkIdent, nnkSym}) and
+  n.strVal in [
+    "int",
+    "int8",
+    "int16",
+    "int32",
+    "int64",
+    "uint",
+    "uint8",
+    "uint16",
+    "uint32",
+    "uint64",
+    "float",
+    "float32",
+    "float64",
+    "bool",
+    "char",
+    "string",
+    "cstring",
+    "cfloat",
+    "cint",
+  ]
+
+macro reactive*(T: typedesc): untyped =
+  ## Turns a value object type into a reactive wrapper type.
+  ##
+  ## ***What it generates***
+  ##
+  ## For a source object `Foo` the macro produces
+  ##
+  ## * `FooReactive`        – a ref object whose fields mirror `Foo` but each
+  ##   field is signal backed (primitive) or a nested wrapper (seq, table,
+  ##   or object).  
+  ## * `toReactive(ctx, src: Foo) : FooReactive` – copies `src` into the
+  ##   wrapper, creating signals owned by `ctx`.  
+  ## * `toPlain(w: FooReactive) : Foo` – returns a deep plain copy, breaking
+  ##   all reactive links.
+  ##
+  ## ***Supported field kinds***
+  ##
+  ## * Primitive scalars (int, float, bool, string, char...) become
+  ##   `Signal[T]`.  
+  ## * `seq[T]` becomes `ReactiveSeq[T]`.  
+  ## * `Table[K, V]`, `TableRef`, or `OrderedTable` becomes
+  ##   `ReactiveTable[K, V]`.  
+  ## * Another object type becomes its own `XReactive` wrapper recursively
+  ##   (you must call `reactive(X)` beforehand).  
+  ## * A field already ending in `Reactive` is copied unchanged.
+  ##
+  ## ***Typical usage***
+  ##
+  ## ```nim
+  ## type Player = object
+  ##   name: string
+  ##   hp:   int
+  ##   pos:  Vec2
+  ##
+  ## reactive(Player)
+  ##
+  ## let p = ctx.toReactive(Player(name: "Eve", hp: 100, pos: Vec2(x:0,y:0)))
+  ## p.hp -= 10                 # reactive write
+  ## echo p.pos.x.val           # reactive read
+  ## ```
+  ##
+  ## ***When to use***
+  ##
+  ## - Any structured data that needs fine grained reactivity without manual
+  ##   signal bookkeeping.  
+  ## - UI view models, game entities, or config records that benefit from
+  ##   undo/redo and autosave out of the box.
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - Only value objects are supported; the source type cannot have custom
+  ##   inheritance beyond `RootObj`.  
+  ## - Recursive types require defining the inner wrapper first.  
+  ## - Private fields become public in the wrapper; place sensitive data in a
+  ##   separate object if needed.
+
+  # retrieve original object
+  let td = T.getImpl()
+  var rhs = td[^1]
+  if rhs.kind == nnkRefTy: rhs = rhs[0]
+  if rhs.kind != nnkObjectTy:
+    error "reactive(): expects value object", T
+
+  var srcFields: NimNode
+  for c in rhs.children:
+    if c.kind == nnkRecList: srcFields = c
+  if srcFields.isNil: error "reactive(): field list not found", T
+
+  # containers
+  let wrapperName = ident($T & "Reactive")
+  var dstFields = newNimNode(nnkRecList)
+  var bodyToPlain = newStmtList()
+  var bodyToReactive = newStmtList()
+
+  let ctxId = genSym(nskParam, "ctx")
+  let srcId = genSym(nskParam, "src")
+  let wrpId = genSym(nskParam, "w")
+
+  # iterate fields
+  for idDefs in srcFields.children:
+    if idDefs.len < 2: continue
+    let typ = (if idDefs.len >= 3: idDefs[^2] else: idDefs[^1])
+    let nIds = idDefs.len - (if idDefs.len >= 3: 2 else: 1)
+
+    # decide destination type
+    var dstTyp: NimNode
+    var usesWrapper = false
+
+    # (1) primitive
+    if typ.isPrimitive:
+      dstTyp = nnkBracketExpr.newTree(ident"Signal", typ)
+
+    # (2) seq[...]
+    elif typ.kind == nnkBracketExpr and
+         typ[0].kind in {nnkIdent, nnkSym} and typ[0].strVal == "seq":
+      let elemT = typ[1]
+      dstTyp = nnkBracketExpr.newTree(ident"ReactiveSeq", elemT)
+      usesWrapper = true
+
+    # (2b) Table[...]
+    elif typ.kind == nnkBracketExpr and
+         typ[0].kind in {nnkIdent, nnkSym} and
+         typ[0].strVal in ["Table", "TableRef", "OrderedTable"]:
+      let kT = typ[1]
+      let vT = typ[2]
+      dstTyp = nnkBracketExpr.newTree(ident"ReactiveTable", kT, vT)
+      usesWrapper = true
+
+    # (3) already a *Reactive wrapper
+    elif typ.kind in {nnkIdent, nnkSym} and typ.strVal.endsWith("Reactive"):
+      dstTyp = typ
+      usesWrapper = true
+
+    # (4) generic object field – wrap recursively
+    else:
+      dstTyp = ident(typ.strVal & "Reactive")
+      usesWrapper = true
+
+    for i in 0 ..< nIds:
+      let raw = idDefs[i]
+      let fname = (if raw.kind == nnkPostfix: raw[1] else: raw)
+
+      dstFields.add newIdentDefs(fname, dstTyp)
+
+      if usesWrapper:
+        bodyToPlain.add quote do:
+          result.`fname` = toPlain(`wrpId`.`fname`)
+        bodyToReactive.add quote do:
+          result.`fname` = `ctxId`.toReactive(`srcId`.`fname`)
+      else:
+        bodyToPlain.add quote do:
+          result.`fname` = `wrpId`.`fname`.val
+        bodyToReactive.add quote do:
+          result.`fname` = signal(`ctxId`, `srcId`.`fname`)
+
+  # build wrapper type
+  let objTy = nnkObjectTy.newTree(
+                  newEmptyNode(),
+                  nnkOfInherit.newTree(ident"RootObj"),
+                  dstFields)
+  let refTy = nnkRefTy.newTree(objTy)
+  let typeDef = nnkTypeDef.newTree(wrapperName, newEmptyNode(), refTy)
+
+  # helper procs
+  let toReactiveProc = quote do:
+    proc toReactive*(`ctxId`: ReactiveCtx; `srcId`: `T`): `wrapperName` =
+      new result
+      `bodyToReactive`
+
+  let toPlainProc = quote do:
+    proc toPlain*(`wrpId`: `wrapperName`): `T` =
+      `bodyToPlain`
+      result
+
+  result = newStmtList(
+    nnkTypeSection.newTree(typeDef),
+    toReactiveProc,
+    toPlainProc)
+
+template updateLen[T](rs: ReactiveSeq[T]) =
+  let s = rs.lenS
+  if s.value != rs.data.len:
+    s.value = rs.data.len
+    notifySubs s
+
+proc mkSignal[T](ctx: ReactiveCtx, v: T): Signal[T] = signal(ctx, v)
+
+proc mutate[T](rs: ReactiveSeq[T], op: proc (s: var seq[Signal[T]])) =
+  let c = rs.ctx
+  if c.isDisposed: return
+
+  let before = rs.data.dup() # shallow copy of signal refs
+  op rs.data
+  rs.updateLen
+  markDirty c
+
+  # undo/redo inside transaction
+  if c.isUndoing or c.isRedoing: return
+  if c.batching > 0:
+    if not rs.pendingActive:
+      rs.pendingActive = true
+      rs.pendingOld = before
+
+      let commit = proc =
+        if not rs.pendingActive: return
+        let oldCopy = rs.pendingOld
+        let newCopy = rs.data.dup()
+
+        let entry: HistoryEntry = (
+          undo: proc =
+            rs.data = oldCopy.dup()
+            rs.updateLen,
+          redo: proc =
+            rs.data = newCopy.dup()
+            rs.updateLen
+        )
+
+        c.undoStack.add entry
+        c.redoStack.setLen 0
+        rs.pendingActive = false
+
+      let h = hash(commit)
+      if h notin c.queueHashes:
+        c.queueHashes.incl h
+        c.queue.add commit
+    return
+
+  # outside any transaction
+  let after = rs.data.dup()
+  let entry: HistoryEntry = (
+    undo: proc =
+      rs.data = before.dup()
+      rs.updateLen,
+    redo: proc =
+      rs.data = after.dup()
+      rs.updateLen
+  )
+  c.undoStack.add entry
+  c.redoStack.setLen 0
+
+template rev*(rs: ReactiveSeq): untyped =
+  ## Returns the structural revision counter of a `ReactiveSeq` and tracks
+  ## the caller as a subscriber. The counter increments every time the
+  ## sequence structure changes (push, insert, remove, clear) regardless of
+  ## whether the overall length changed. Useful when you need to rerun an
+  ## effect on any structural edit, even those that keep the length
+  ## constant, such as swapping two elements.
+
+  registerDep rs.revS
+  rs.revS.value
+
+proc toReactive*[T](ctx: ReactiveCtx, src: seq[T]): ReactiveSeq[T] =
+  ## Wraps an existing `seq[T]` in `ctx`, producing a `ReactiveSeq` where
+  ## every element becomes its own signal. The original sequence is copied
+  ## once; later changes must be applied through the `ReactiveSeq` mutators
+  ## or by writing the element signals directly.
+  ##
+  ## The resulting wrapper integrates with effects, transactions, undo and
+  ## redo, autosave, and the active scheduler in the same way as a sequence
+  ## built via repeated `push` calls.
+
+  new result
+  result.ctx = ctx
+  for v in src: result.data.add mkSignal(ctx, v)
+  result.lenS = signal(ctx, src.len)
+
+proc toPlain*[T](rs: ReactiveSeq[T]): seq[T] =
+  ## Converts a `ReactiveSeq` into a plain `seq[T]` by copying the current
+  ## element values. No dependencies are recorded and later changes to the
+  ## reactive sequence do not affect the returned copy. Use this when you
+  ## need an immutable snapshot for logging, JSON serialisation, or deep
+  ## equality tests.
+
+  for s in rs.data: result.add s.val
+
+template `[]`*[T](rs: ReactiveSeq[T], idx: int): untyped =
+  rs.data[idx]
+
+proc push*[T](rs: ReactiveSeq[T], x: T) =
+  ## Appends `x` to the end of the reactive sequence.
+  ##
+  ## ***Reactive effects***
+  ##
+  ## - Structural edit: length grows by 1 and `rev(rs)` increments.  
+  ## - Pushes one history entry or merges into an open transaction.  
+  ## - Effects that depend on length or structure rerun.
+
+  rs.mutate(proc (v: var seq[Signal[T]]) = v.add mkSignal(rs.ctx, x))
+
+proc pop*[T](rs: ReactiveSeq[T]): T =
+  ## Removes and returns the last element of the reactive sequence.
+  ## Counts as a structural edit: pushes one undo entry (or joins the current
+  ## transaction), updates `len(rs)` and `rev(rs)`, and reruns effects that
+  ## depend on length or structure. Raises `IndexDefect` if the sequence is
+  ## empty.
+
+  var sig: Signal[T]
+  rs.mutate(proc (v: var seq[Signal[T]]) = sig = v.pop())
+  result = sig.val
+
+proc insert*[T](rs: ReactiveSeq[T], idx: int, x: T) =
+  ## Inserts `x` at position `idx`, shifting later elements to the right.
+  ## Counts as a structural edit: pushes one history entry (or joins the
+  ## current transaction), updates `len(rs)` and `rev(rs)`, and reruns effects
+  ## that depend on length or structure. `idx` must be in the range
+  ## 0 .. rs.len.
+
+  rs.mutate(proc (v: var seq[Signal[T]]) =
+    sequtils.insert(v, @[mkSignal(rs.ctx, x)], idx)   # wrap as slice
+  )
+
+proc removeIdx*[T](rs: ReactiveSeq[T], idx: int) =
+  ## Removes the element at `idx` from a `ReactiveSeq`.
+  ##
+  ## ***Effects***
+  ## - Structural edit: `len(rs)` and `rev(rs)` update.
+  ## - Pushes one history entry (or merges into an open transaction).
+  ## - Triggers effects that depend on length or structure.
+  ##
+  ## Raises `IndexDefect` if `idx` is out of range.
+
+
+  rs.mutate(proc (v: var seq[Signal[T]]) = v.delete idx)
+
+proc clear*[T](rs: ReactiveSeq[T]) =
+  ## Removes all elements from the reactive sequence.
+  ##
+  ## - Structural edit: sets length to 0 and increments `rev(rs)`.
+  ## - Pushes one history entry (or merges into an active transaction).
+  ## - Effects that depend on length or structure rerun after the flush.
+  ##
+  ## Raises no error when the sequence is already empty.
+  rs.mutate(proc (v: var seq[Signal[T]]) = v.setLen 0)
+
+template len*(rs: ReactiveSeq): untyped =
+  ## Returns the current element count of a `ReactiveSeq` **and** registers
+  ## the caller as a subscriber. Any structural change (push, insert,
+  ## remove, clear) updates the length signal and reruns effects that read
+  ## it. Use this inside effects or computed signals when later mutations
+  ## should trigger reactive updates.
+
+  registerDep rs.lenS
+  rs.lenS.value
+
+template peekLen*(rs: ReactiveSeq): untyped = 
+  ## Returns the length of a `ReactiveSeq` without tracking the caller as a
+  ## subscriber. Handy for quick size checks in places where you do not want
+  ## to establish reactivity.
+
+  peek rs.lenS
+
+iterator items*[T](rs: ReactiveSeq[T]): T =
+  ## Yields each element of a `ReactiveSeq` as a plain value, from index 0 to
+  ## `len(rs) - 1`. Reading through this iterator does **not** establish
+  ## reactive dependencies, because it reads the cached `.val` of each
+  ## element without registering the iterator as an observer.
+  ##
+  ## Use it to build snapshots or aggregate results without causing future
+  ## updates to rerun the loop. If you need an effect to rerun when elements
+  ## change, iterate with explicit `for i in 0 ..< len(rs): discard rs[i].val`
+  ## so each element signal is tracked.
+
+  for s in rs.data: yield s.val
+
+proc `==`*[T](a: Signal[seq[T]], b: seq[T]): bool = a.val == b
+proc `==`*[T](a: seq[T],            b: Signal[seq[T]]): bool = a == b.val
+
+proc `==`*[T](a: ReactiveSeq[T], b: seq[T]): bool =
+  ## Convert ReactiveSeq to plain seq once and compare element-wise.
+  if a.len != b.len: return false
+  for i in 0 ..< a.len:
+    if a[i].val != b[i]:
+      return false
+  true
+
+proc `==`*[T](a: seq[Signal[T]], b: seq[T]): bool =
+  if a.len != b.len: return false
+  for i in 0 ..< a.len:
+    if a[i].val != b[i]:
+      return false
+  true
+
+proc `==`*[T](a: seq[T], b: seq[Signal[T]]): bool = b == a   # symmetric
+proc `==`*[T](a: seq[T], b: ReactiveSeq[T]): bool = b == a   # reuse
+
+proc useFrameScheduler*(
+  ctx: ReactiveCtx,
+  enqueueNextFrm: proc(cb: proc())
+) =
+  ## Installs a frame based reaction scheduler.
+  ##
+  ## ***Purpose***
+  ##
+  ## In games and UI toolkits work is often grouped by frames. With the frame
+  ## scheduler all reactions that occur within the same frame are batched and
+  ## flushed once at the start of the next frame tick.
+  ##
+  ## ***How to wire it***
+  ##
+  ## ```nim
+  ## var tasks: seq[proc ()] = @[]
+  ## useFrameScheduler(ctx, proc(cb: proc ()) = tasks.add cb)
+  ##
+  ## # later in the render loop
+  ## for t in tasks: t()
+  ## tasks.setLen 0
+  ## ```
+  ##
+  ## The supplied `enqueueNextFrm` must place `cb` into a queue that the
+  ## caller empties at the start of the next frame. The library calls
+  ## `enqueueNextFrm` exactly once per frame no matter how many reactions
+  ## were queued.
+  ##
+  ## ***Effects on the engine***
+  ##
+  ## - Multiple signal writes per frame cause only one flush and one
+  ##   autosave, reducing redundant work.
+  ## - `transaction(ctx)` blocks still coalesce as usual; the flush happens
+  ##   on the next frame tick.
+  ##
+  ## ***Pitfalls***
+  ##
+  ## - Forgetting to run the queued callback each frame will stall the
+  ##   reactive graph.
+  ## - Calling `flushQueued(ctx)` manually is still possible but defeats the
+  ##   batching benefit.
+
+  ctx.framePending = false # clear any earlier reservation
+
+  ctx.scheduler = proc(reaction: proc()) =
+    let h = hash(reaction)
+    if h notin ctx.queueHashes:
+      ctx.queueHashes.incl h
+      ctx.queue.add reaction
+
+    # first reaction this frame → schedule a single flush
+    if not ctx.framePending:
+      ctx.framePending = true
+      enqueueNextFrm proc =
+        ctx.framePending = false # reset flag for the *next* frame
+        flushQueued ctx
+
+template updateLen[K, V](rt: ReactiveTable[K, V]) =
+  let s = rt.lenS
+  if s.value != rt.data.len:
+    s.value = rt.data.len
+    notifySubs s
+
+template bumpRev[K, V](rt: ReactiveTable[K, V]) =
+  let s = rt.revS
+  s.value.inc
+  notifySubs s
+
+proc mutate[K, V](
+  rt: ReactiveTable[K, V],
+  op: proc (t: var Table[K, Signal[V]])
+) =
+  let c = rt.ctx
+  if c.isDisposed: return
+
+  let before = rt.data                  # value copy
+  op rt.data                            # perform mutation
+  rt.updateLen
+  rt.bumpRev
+  markDirty c
+
+  if c.isUndoing or c.isRedoing: return
+
+  # inside transaction → coalesce
+  if c.batching > 0:
+    if not rt.pendingActive:
+      rt.pendingActive = true
+      rt.pendingOld = before
+
+      let commit = proc =
+        if not rt.pendingActive: return
+        let oldCopy = rt.pendingOld
+        let newCopy = rt.data
+        let entry: HistoryEntry = (
+          undo: proc =
+            rt.data = oldCopy
+            rt.updateLen
+            rt.bumpRev,
+          redo: proc =
+            rt.data = newCopy
+            rt.updateLen
+            rt.bumpRev
+        )
+        c.undoStack.add entry
+        c.redoStack.setLen 0
+        rt.pendingActive = false
+
+      let h = hash(commit)
+      if h notin c.queueHashes:
+        c.queueHashes.incl h
+        c.queue.add commit
+    return
+
+  # outside transaction
+  let after = rt.data
+  let entry: HistoryEntry = (
+    undo: proc =
+      rt.data = before
+      rt.updateLen
+      rt.bumpRev,
+    redo: proc =
+      rt.data = after
+      rt.updateLen
+      rt.bumpRev
+  )
+  c.undoStack.add entry
+  c.redoStack.setLen 0
+
+proc toReactive*[K, V](
+  ctx: ReactiveCtx,
+  src: Table[K, V]
+): ReactiveTable[K, V] =
+  ## Wraps an existing `Table[K, V]` in `ctx`, producing a `ReactiveTable`
+  ## whose keys keep the same order and whose values are turned into
+  ## individual signals. The original table is read once; subsequent edits
+  ## must go through the `ReactiveTable` API to stay reactive.
+  ##
+  ## Structural and value edits made after wrapping participate in
+  ## transactions, undo and redo, autosave, and the scheduler just like any
+  ## table created from scratch.
+
+  new result
+  result.ctx = ctx
+  for k, v in src:
+    result.data[k] = mkSignal(ctx, v)
+  result.lenS = signal(ctx, src.len)
+  result.revS = signal(ctx, 0)
+
+proc toPlain*[K, V](rt: ReactiveTable[K, V]): Table[K, V] =
+  ## Returns a plain `Table[K, V]` that contains the current values of a
+  ## `ReactiveTable`.  The result is a deep copy; mutating it does not affect
+  ## the reactive table or its signals.
+  result = initTable[K, V]()
+  for k, sv in rt.data:
+    result[k] = sv.val
+
+proc `[]`*[K, V](rt: ReactiveTable[K, V], key: K): Signal[V] =
+  if key in rt.data:
+    return rt.data[key]
+
+  # Key absent -> create default signal and register a structural insert
+  let s = mkSignal(rt.ctx, default(V))
+  rt.mutate proc(t: var Table[K, Signal[V]]) = t[key] = s
+  s
+
+proc put*[K, V](rt: ReactiveTable[K, V], key: K, val: V) =
+  ## Adds or replaces `key` in the reactive table with `val`.  
+  ## If the key already exists the element signal is updated; otherwise a new
+  ## element signal is created and a structural history entry is pushed.
+  ## Effects watching `len(rt)` or `rev(rt)` rerun only when the key did not
+  ## exist before.
+
+  if key in rt.data:
+    let sig = rt.data[key]
+    let c = rt.ctx
+    if c.batching > 0 and rt.pendingActive:
+      # already collecting a structural commit → write raw, no history push
+      if sig.value != val:
+        sig.value = val
+        notifySubs sig
+        markDirty c
+    else:
+      sig.set val # normal signal write (with history)
+  else:
+    rt.mutate proc(t: var Table[K, Signal[V]]) =
+      t[key] = mkSignal(rt.ctx, val)
+
+
+proc delKey*[K, V](rt: ReactiveTable[K, V], key: K) =
+  ## Removes `key` from the reactive table if it exists.
+  ##
+  ## ***Reactive effects***
+  ##
+  ## - Structural operation; bumps `rev(rt)` and updates `len(rt)`.  
+  ## - Pushes a history entry (or merges into an open transaction).  
+  ## - Effects that depend on length or on `rev(rt)` rerun.
+  ##
+  ## Keys that are not present are ignored and no history entry is added.
+
+  rt.mutate proc(t: var Table[K, Signal[V]]) =
+    tables.`del`(t, key)
+
+proc clear*[K, V](rt: ReactiveTable[K, V]) =
+  ## Removes all key-value pairs in one step.
+  ##
+  ## ***Effect on reactivity***
+  ##
+  ## - Pushes a single structural history entry (or joins the active
+  ##   transaction).  
+  ## - Resets `len(rt)` to 0 and bumps `rev(rt)`.  
+  ## - Triggers any effects that depend on length or structure.
+
+  rt.mutate (t: var Table[K, Signal[V]]) => t.clear()
+
+template len*(rt: ReactiveTable): untyped =
+  ## Returns the number of key-value pairs stored in a `ReactiveTable` and
+  ## tracks the caller as a subscriber. Any structural change (put, delKey,
+  ## clear) updates the length signal and reruns dependent effects or
+  ## computed values. Ideal for counters and list-rendering logic that must
+  ## stay in sync with the table’s size.
+
+  registerDep rt.lenS
+  rt.lenS.value
+
+template rev*(rt: ReactiveTable): untyped =
+  ## Returns the structural revision counter of a `ReactiveTable` and tracks
+  ## the caller as a subscriber. The counter increments on every key set,
+  ## key removal, or `clear`, allowing an effect to react to any structural
+  ## mutation even when the entry count stays the same.
+  registerDep rt.revS
+  rt.revS.value
+
+template peekLen*(rt: ReactiveTable): untyped = 
+  ## Returns the entry count of a `ReactiveTable` without tracking a
+  ## dependency. Use when you need the value once and do not want the caller
+  ## to rerun on structural changes.
+  peek rt.lenS
+
+template peekRev*(rt: ReactiveTable): untyped = 
+  ## Returns the revision counter of a `ReactiveTable` without tracking a
+  ## dependency. Suitable for diagnostic logs or conditional code paths that
+  ## should not trigger on future table mutations.
+  peek rt.revS
+
+iterator values*[K, V](rt: ReactiveTable[K, V]): V =
+  ## Yields the plain value of every entry in a `ReactiveTable`, in key order
+  ## as produced by the container’s iterator. Like `items` on `ReactiveSeq`
+  ## this iterator does **not** establish dependencies; it simply reads
+  ## `signal.val` for each stored value and returns the result.
+  ##
+  ## Ideal for one-off summarisation or JSON export. If you need live
+  ## reactivity over the values, iterate keys and read `rt[key].val`
+  ## explicitly so each value signal is tracked.
+  for _, sv in rt.data: yield sv.val
+
+proc `==`*[K, V](a: ReactiveTable[K, V], b: Table[K, V]): bool =
+  if a.len != b.len: return false
+  for k, sv in a.data:
+    if k notin b or sv.val != b[k]:
+      return false
+  true
+
+proc `==`*[K, V](a: Table[K, V], b: ReactiveTable[K, V]): bool = b == a
+
+proc `[]=`*[K, V](rt: ReactiveTable[K, V], key: K, val: V) =
+  if key in rt.data:
+    rt.data[key].set val # element-level write
+  else:
+    rt.put(key, val) # falls back to structural mutator
+
+proc `[]=`*[T](rs: ReactiveSeq[T], idx: int, v: T) =
+  rs[idx].set v

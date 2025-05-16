@@ -1,0 +1,90 @@
+nimTitle	signals	signals.html	module signals		0
+nim	HistoryEntry	signals.html#HistoryEntry	tuple HistoryEntry		94
+nim	ReactiveCtx	signals.html#ReactiveCtx	type ReactiveCtx		130
+nim	Cleanup	signals.html#Cleanup	type Cleanup		200
+nim	AddCleanup	signals.html#AddCleanup	type AddCleanup		216
+nim	Signal	signals.html#Signal	type Signal		254
+nim	ReactiveSeq	signals.html#ReactiveSeq	type ReactiveSeq		304
+nim	ReactiveTable	signals.html#ReactiveTable	type ReactiveTable		363
+nim	newReactiveCtx	signals.html#newReactiveCtx	proc newReactiveCtx(): ReactiveCtx		424
+nim	signal	signals.html#signal,ReactiveCtx,T	proc signal[T](ctx: ReactiveCtx; v: T): Signal[T]		447
+nim	store	signals.html#store,ReactiveCtx,string,T	proc store[T](ctx: ReactiveCtx; key: string; init: T): Signal[T]		500
+nim	registerStore	signals.html#registerStore,ReactiveCtx,string,Signal[T]	proc registerStore[T](ctx: ReactiveCtx; key: string; s: Signal[T])		518
+nim	saveState	signals.html#saveState,ReactiveCtx,JsonNode	proc saveState(ctx: ReactiveCtx; dest: var JsonNode)		535
+nim	loadState	signals.html#loadState,ReactiveCtx,JsonNode	proc loadState(ctx: ReactiveCtx; src: JsonNode)		551
+nim	enableAutosave	signals.html#enableAutosave,ReactiveCtx,JsonNode	proc enableAutosave(ctx: ReactiveCtx; target: var JsonNode)		586
+nim	disableAutosave	signals.html#disableAutosave,ReactiveCtx	proc disableAutosave(ctx: ReactiveCtx)		625
+nim	val	signals.html#val.t,Signal	template val(s: Signal): untyped		652
+nim	set	signals.html#set,Signal[T],T	proc set[T](s: Signal[T]; v: T)		701
+nim	`$`	signals.html#$.t,Signal	template `$`(s: Signal): untyped		769
+nim	`+=`	signals.html#+=.t,Signal[T],T	template `+=`[T](s: Signal[T]; d: T)		770
+nim	`-=`	signals.html#-=.t,Signal[T],T	template `-=`[T](s: Signal[T]; d: T)		771
+nim	`*=`	signals.html#*=.t,Signal[T],T	template `*=`[T](s: Signal[T]; d: T)		772
+nim	`==`	signals.html#==,Signal[T],T	proc `==`[T](a: Signal[T]; b: T): bool		774
+nim	`==`	signals.html#==,T,Signal[T]	proc `==`[T](a: T; b: Signal[T]): bool		775
+nim	computed	signals.html#computed,ReactiveCtx,proc),proc(T)	proc computed[T](ctx: ReactiveCtx; getter: proc (): T; setter: proc (v: T) = nil): Signal[\n    T]		777
+nim	effect	signals.html#effect,ReactiveCtx,proc)	proc effect(ctx: ReactiveCtx; body: proc ())		836
+nim	effect	signals.html#effect,ReactiveCtx,proc(AddCleanup)	proc effect(ctx: ReactiveCtx; body: proc (onCleanup: AddCleanup))		882
+nim	flushQueued	signals.html#flushQueued,ReactiveCtx	proc flushQueued(ctx: ReactiveCtx)		931
+nim	transaction	signals.html#transaction.t,ReactiveCtx,untyped	template transaction(ctx: ReactiveCtx; body: untyped)		975
+nim	undo	signals.html#undo,ReactiveCtx,int	proc undo(ctx: ReactiveCtx; steps = 1)		1037
+nim	redo	signals.html#redo,ReactiveCtx,int	proc redo(ctx: ReactiveCtx; steps = 1)		1054
+nim	undoDepth	signals.html#undoDepth,ReactiveCtx	proc undoDepth(ctx: ReactiveCtx): int		1070
+nim	redoDepth	signals.html#redoDepth,ReactiveCtx	proc redoDepth(ctx: ReactiveCtx): int		1076
+nim	clearUndo	signals.html#clearUndo,ReactiveCtx	proc clearUndo(ctx: ReactiveCtx)		1081
+nim	snapshot	signals.html#snapshot,ReactiveCtx	proc snapshot(ctx: ReactiveCtx): int		1111
+nim	travel	signals.html#travel,ReactiveCtx,int	proc travel(ctx: ReactiveCtx; index: int)		1120
+nim	useQueuedScheduler	signals.html#useQueuedScheduler,ReactiveCtx	proc useQueuedScheduler(ctx: ReactiveCtx)		1134
+nim	watch	signals.html#watch,ReactiveCtx,,proc(T,T)	proc watch[T](ctx: ReactiveCtx; selector: () -> T; handler: proc (newVal, oldVal: T);\n         immediate = false)		1163
+nim	watchNow	signals.html#watchNow.t,ReactiveCtx,,proc(T,T)	template watchNow[T](ctx: ReactiveCtx; selector: () -> T;\n            handler: proc (newVal, oldVal: T))		1223
+nim	dumpDeps	signals.html#dumpDeps,Signal	proc dumpDeps(s: Signal): seq[string]		1237
+nim	dispose	signals.html#dispose,ReactiveCtx	proc dispose(ctx: ReactiveCtx)		1243
+nim	memo	signals.html#memo,ReactiveCtx,	proc memo[T](ctx: ReactiveCtx; selector: () -> T): () -> T		1279
+nim	peek	signals.html#peek.t,Signal[T]	template peek[T](s: Signal[T]): untyped		1332
+nim	effectOnce	signals.html#effectOnce,ReactiveCtx,proc)	proc effectOnce(ctx: ReactiveCtx; body: proc ())		1350
+nim	isPrimitive	signals.html#isPrimitive,NimNode	proc isPrimitive(n: NimNode): bool		1380
+nim	reactive	signals.html#reactive.m,typedesc	macro reactive(T: typedesc): untyped		1410
+nim	rev	signals.html#rev.t,ReactiveSeq	template rev(rs: ReactiveSeq): untyped		1630
+nim	toReactive	signals.html#toReactive,ReactiveCtx,seq[T]	proc toReactive[T](ctx: ReactiveCtx; src: seq[T]): ReactiveSeq[T]		1641
+nim	toPlain	signals.html#toPlain,ReactiveSeq[T]	proc toPlain[T](rs: ReactiveSeq[T]): seq[T]		1656
+nim	`[]`	signals.html#[].t,ReactiveSeq[T],int	template `[]`[T](rs: ReactiveSeq[T]; idx: int): untyped		1665
+nim	push	signals.html#push,ReactiveSeq[T],T	proc push[T](rs: ReactiveSeq[T]; x: T)		1668
+nim	pop	signals.html#pop,ReactiveSeq[T]	proc pop[T](rs: ReactiveSeq[T]): T		1679
+nim	insert	signals.html#insert,ReactiveSeq[T],int,T	proc insert[T](rs: ReactiveSeq[T]; idx: int; x: T)		1690
+nim	removeIdx	signals.html#removeIdx,ReactiveSeq[T],int	proc removeIdx[T](rs: ReactiveSeq[T]; idx: int)		1701
+nim	clear	signals.html#clear,ReactiveSeq[T]	proc clear[T](rs: ReactiveSeq[T])		1714
+nim	len	signals.html#len.t,ReactiveSeq	template len(rs: ReactiveSeq): untyped		1724
+nim	peekLen	signals.html#peekLen.t,ReactiveSeq	template peekLen(rs: ReactiveSeq): untyped		1734
+nim	items	signals.html#items.i,ReactiveSeq[T]	iterator items[T](rs: ReactiveSeq[T]): T		1741
+nim	`==`	signals.html#==,Signal[seq[T]],seq[T]	proc `==`[T](a: Signal[seq[T]]; b: seq[T]): bool		1754
+nim	`==`	signals.html#==,seq[T],Signal[seq[T]]	proc `==`[T](a: seq[T]; b: Signal[seq[T]]): bool		1755
+nim	`==`	signals.html#==,ReactiveSeq[T],seq[T]	proc `==`[T](a: ReactiveSeq[T]; b: seq[T]): bool		1757
+nim	`==`	signals.html#==,seq[Signal[T]],seq[T]	proc `==`[T](a: seq[Signal[T]]; b: seq[T]): bool		1765
+nim	`==`	signals.html#==,seq[T],seq[Signal[T]]	proc `==`[T](a: seq[T]; b: seq[Signal[T]]): bool		1772
+nim	`==`	signals.html#==,seq[T],ReactiveSeq[T]	proc `==`[T](a: seq[T]; b: ReactiveSeq[T]): bool		1773
+nim	useFrameScheduler	signals.html#useFrameScheduler,ReactiveCtx,proc(proc))	proc useFrameScheduler(ctx: ReactiveCtx; enqueueNextFrm: proc (cb: proc ()))		1775
+nim	toReactive	signals.html#toReactive,ReactiveCtx,Table[K,V]	proc toReactive[K, V](ctx: ReactiveCtx; src: Table[K, V]): ReactiveTable[K, V]		1903
+nim	toPlain	signals.html#toPlain,ReactiveTable[K,V]	proc toPlain[K, V](rt: ReactiveTable[K, V]): Table[K, V]		1923
+nim	`[]`	signals.html#[],ReactiveTable[K,V],K	proc `[]`[K, V](rt: ReactiveTable[K, V]; key: K): Signal[V]		1931
+nim	put	signals.html#put,ReactiveTable[K,V],K,V	proc put[K, V](rt: ReactiveTable[K, V]; key: K; val: V)		1940
+nim	delKey	signals.html#delKey,ReactiveTable[K,V],K	proc delKey[K, V](rt: ReactiveTable[K, V]; key: K)		1963
+nim	clear	signals.html#clear,ReactiveTable[K,V]	proc clear[K, V](rt: ReactiveTable[K, V])		1977
+nim	len	signals.html#len.t,ReactiveTable	template len(rt: ReactiveTable): untyped		1989
+nim	rev	signals.html#rev.t,ReactiveTable	template rev(rt: ReactiveTable): untyped		1999
+nim	peekLen	signals.html#peekLen.t,ReactiveTable	template peekLen(rt: ReactiveTable): untyped		2007
+nim	peekRev	signals.html#peekRev.t,ReactiveTable	template peekRev(rt: ReactiveTable): untyped		2013
+nim	values	signals.html#values.i,ReactiveTable[K,V]	iterator values[K, V](rt: ReactiveTable[K, V]): V		2019
+nim	`==`	signals.html#==,ReactiveTable[K,V],Table[K,V]	proc `==`[K, V](a: ReactiveTable[K, V]; b: Table[K, V]): bool		2030
+nim	`==`	signals.html#==,Table[K,V],ReactiveTable[K,V]	proc `==`[K, V](a: Table[K, V]; b: ReactiveTable[K, V]): bool		2037
+nim	`[]=`	signals.html#[]=,ReactiveTable[K,V],K,V	proc `[]=`[K, V](rt: ReactiveTable[K, V]; key: K; val: V)		2039
+nim	`[]=`	signals.html#[]=,ReactiveSeq[T],int,T	proc `[]=`[T](rs: ReactiveSeq[T]; idx: int; v: T)		2045
+nimgrp	effect	signals.html#effect-procs-all	proc		836
+nimgrp	==	signals.html#==-procs-all	proc		774
+nimgrp	[]=	signals.html#[]=-procs-all	proc		2039
+nimgrp	toplain	signals.html#toPlain-procs-all	proc		1656
+nimgrp	toreactive	signals.html#toReactive-procs-all	proc		1641
+nimgrp	clear	signals.html#clear-procs-all	proc		1714
+nimgrp	rev	signals.html#rev-templates-all	template		1630
+nimgrp	peeklen	signals.html#peekLen-templates-all	template		1734
+nimgrp	len	signals.html#len-templates-all	template		1724
+heading	Signals - Durable Reactive Effects for Nim	signals.html#signals-minus-durable-reactive-effects-for-nim	 Signals - Durable Reactive Effects for Nim		0
