@@ -645,11 +645,15 @@ proc disableAutosave*(ctx: ReactiveCtx) =
   ctx.autoTarget = nil
 
 proc registerDep(s: Signal) =
-  let c = s.ctx
+  ## Safely record the current observer on `s`, if any.
+  if s.isNil:                     # ← new: tolerate transient nil slots
+    return
 
+  let c = s.ctx
   if c.currentObserver == nil: return
   if c.currentObserver in s.subs: return
   s.subs.add c.currentObserver
+
 
 template val*(s: Signal): untyped =
   ## Expands to `s.value` and performs dependency tracking.
@@ -773,8 +777,12 @@ template `+=`*[T](s: Signal[T], d: T) = s.set s.val + d
 template `-=`*[T](s: Signal[T], d: T) = s.set s.val - d
 template `*=`*[T](s: Signal[T], d: T) = s.set s.val * d
 
-proc `==`*[T](a: Signal[T], b: T): bool = a.val == b
-proc `==`*[T](a: T, b: Signal[T]): bool = a == b.val
+proc `==`*[T](a: Signal[T], b: T): bool =
+  (not a.isNil) and a.value == b
+
+proc `==`*[T](a: T, b: Signal[T]): bool =
+  (not b.isNil) and a == b.value
+
 
 proc computed*[T](
   ctx: ReactiveCtx,
@@ -1109,7 +1117,6 @@ proc markDirty(ctx: ReactiveCtx) =
   if ctx.batching == 0:
     ctx.scheduler () => flushQueued ctx
 
-# ─── snapshot & travel  -----------------------------------------------------
 proc snapshot*(ctx: ReactiveCtx): int =
   ## Creates a checkpoint of the current undo position and returns its index.
   ## Use the returned int later with `travel(ctx, index)` to jump back or
@@ -1760,26 +1767,11 @@ iterator items*[T](rs: ReactiveSeq[T]): T =
 
   for s in rs.data: yield s.val
 
-proc `==`*[T](a: Signal[seq[T]], b: seq[T]): bool = a.val == b
-proc `==`*[T](a: seq[T],            b: Signal[seq[T]]): bool = a == b.val
+proc `==`*[T](a: Signal[seq[T]], b: seq[T]): bool =
+  a.val == b
 
-proc `==`*[T](a: ReactiveSeq[T], b: seq[T]): bool =
-  ## Convert ReactiveSeq to plain seq once and compare element-wise.
-  if a.len != b.len: return false
-  for i in 0 ..< a.len:
-    if a[i].val != b[i]:
-      return false
-  true
-
-proc `==`*[T](a: seq[Signal[T]], b: seq[T]): bool =
-  if a.len != b.len: return false
-  for i in 0 ..< a.len:
-    if a[i].val != b[i]:
-      return false
-  true
-
-proc `==`*[T](a: seq[T], b: seq[Signal[T]]): bool = b == a   # symmetric
-proc `==`*[T](a: seq[T], b: ReactiveSeq[T]): bool = b == a   # reuse
+proc `==`*[T](a: seq[T], b: Signal[seq[T]]): bool =
+  a == b.val
 
 proc useFrameScheduler*(
   ctx: ReactiveCtx,
@@ -2061,29 +2053,36 @@ template withSeq[T](rs: ReactiveSeq[T], body: untyped) =
   ## Executes `body` with a *mutable* alias `seqSig` that refers to the
   ## internal `seq[Signal[T]]`, wrapped in `rs.mutate` so the engine
   ## records one structural history entry and bumps `len` / `rev`.
-  rs.mutate(proc (seqSig {.inject.}: var seq[Signal[T]]) =
-    body)
+  rs.mutate proc (seqSig {.inject.}: var seq[Signal[T]]) =
+    body
 
-# ------------ algorithm helpers ----------------------------------
 proc sort*[T](
   rs: ReactiveSeq[T],
-  cmp: proc (x, y: T): int {.closure.} = cmp[T],
+  cmp: proc (x, y: T): int  = cmp[T],
   order = SortOrder.Ascending
 ) =
   rs.withSeq:
-    seqSig.sort(                              # std/algorithm.sort
-      proc(a, b: Signal[T]): int = cmp(a.val, b.val),
-      order)
+    seqSig.sort(
+      (a, b) => cmp(a.val, b.val),
+      order
+    )
 
 proc reverse*[T](rs: ReactiveSeq[T]) =
   rs.withSeq: seqSig.reverse()
 
-proc reverse*[T](rs: ReactiveSeq[T], first, last: Natural) =
-  rs.withSeq: seqSig[first .. last].reverse()
+proc reverse*[T](
+  rs: ReactiveSeq[T],
+  first, last: Natural
+) =
+  ## Reverse the elements in the index range [first, last] inclusively,
+  ## recording ONE structural history entry.
+  rs.withSeq:
+    reverse(seqSig, first, last)
+
 
 proc rotateLeft*[T](rs: ReactiveSeq[T], dist: int): int {.discardable.} =
   rs.withSeq:
-    discard rotateLeft(seqSig, dist)          # std/algorithm.rotateLeft
+    discard rotateLeft(seqSig, dist)
 
 proc fill*[T](rs: ReactiveSeq[T], value: T) =
   ## Overwrite every element with `value`, recording ONE undo entry.
@@ -2109,7 +2108,7 @@ proc fill*[T](rs: ReactiveSeq[T], value: T) =
   markDirty ctx # autosave / scheduler wake-up
 
   let entry: HistoryEntry = (
-    undo: (proc () =
+    undo: (proc =
       ctx.isUndoing = true
       for i, s in rs.data:
         s.value = oldVals[i]
@@ -2117,7 +2116,7 @@ proc fill*[T](rs: ReactiveSeq[T], value: T) =
       ctx.isUndoing = false
       markDirty ctx),
 
-    redo: (proc () =
+    redo: (proc =
       ctx.isRedoing = true
       for s in rs.data:
         s.value = value
@@ -2131,50 +2130,12 @@ proc fill*[T](rs: ReactiveSeq[T], value: T) =
 
 
 proc binarySearch*[T](rs: ReactiveSeq[T], key: T): int =
-  discard rs.rev                     # track structural revisions
-  binarySearch(rs.data, key,
-               proc(a: Signal[T], b: T): int = cmp(a.val, b))
-
-
-proc isSorted*[T](
-  rs: ReactiveSeq[T],
-  order = SortOrder.Ascending
-): bool =
-  discard rs.rev
-  isSorted(rs.data,
-           proc(a, b: Signal[T]): int = cmp(a.val, b.val),
-           order)
-
-
-# ! here
-
-proc lowerBound*[T](rs: ReactiveSeq[T], key: T): int =
-  discard rs.rev                     # track structural changes
-  lowerBound(rs.data, key,
-             proc(a: Signal[T], b: T): int = cmp(a.val, b))
-
-proc upperBound*[T](rs: ReactiveSeq[T], key: T): int =
-  discard rs.rev
-  upperBound(rs.data, key,
-             proc(a: Signal[T], b: T): int = cmp(a.val, b))
-
-proc lowerBound*[T, K](
-  rs: ReactiveSeq[T],
-  key: K,
-  cmp: proc (x: T, k: K): int {.closure.}
-): int =
-  discard rs.rev
-  lowerBound(rs.data, key,
-             proc(a: Signal[T], b: K): int = cmp(a.val, b))
-
-proc upperBound*[T, K](
-  rs: ReactiveSeq[T],
-  key: K,
-  cmp: proc (x: T, k: K): int {.closure.}
-): int =
-  discard rs.rev
-  upperBound(rs.data, key,
-             proc(a: Signal[T], b: K): int = cmp(a.val, b))
+  discard rs.rev # track structural revisions
+  binarySearch(
+    rs.data,
+    key,
+    (a, b) => cmp(a.val, b)
+  )
 
 proc nextPermutation*[T](rs: ReactiveSeq[T]): bool {.discardable.} =
   var changed = false
@@ -2198,7 +2159,7 @@ proc rotateLeft*[T](
 
 proc sorted*[T](
   rs: ReactiveSeq[T],
-  cmp: proc(x,y:T): int {.closure.} = cmp[T],
+  cmp: proc(x,y:T): int  = cmp[T],
   order = SortOrder.Ascending
 ): seq[T] =
   # no structural effects; just snapshot → sort copy → return
@@ -2206,8 +2167,86 @@ proc sorted*[T](
   for i,sig in rs.data: result[i] = sig.val
   result.sort(cmp, order)
 
-# existing 3-parameter version (cmp + order) is already present
 proc sorted*[T](rs: ReactiveSeq[T], order: SortOrder): seq[T] =
   ## Convenience wrapper that matches `std/algorithm.sorted(a, order)`.
   ## Uses the default comparator for `T`.
   sorted[T](rs, cmp[T], order)
+
+template cmpRaw(a, b: Signal): int = cmp(a.value, b.value)
+
+proc isSorted*[T](
+  rs: ReactiveSeq[T],
+  order = SortOrder.Ascending
+): bool =
+  ## Dependency-tracked check that never touches `.val`
+  discard rs.rev # keep caller reactive
+
+  isSorted(
+    rs.data,
+    (a, b) => cmp[T](a.value, b.value),
+    order
+  )
+
+proc isSorted*[T](
+  rs: ReactiveSeq[T],
+  cmp: (T, T) -> int,
+  order = SortOrder.Ascending
+): bool =
+  discard rs.rev
+  isSorted(
+    rs.data,
+    (a, b) => cmp(a.value, b.value),
+    order
+  )
+
+proc lowerBound*[T,K](
+  rs: ReactiveSeq[T],
+  key: K,
+  cmp: (T, K) -> int
+): int =
+  discard rs.rev
+  lowerBound(
+    rs.data,
+    key,
+    (a, k) => cmp(a.value, k)
+  )
+
+proc upperBound*[T,K](
+  rs: ReactiveSeq[T],
+  key: K,
+  cmp: (T, K) -> int
+): int =
+  discard rs.rev
+  upperBound(
+    rs.data,
+    key,
+    (a, k) => cmp(a.value, k)
+  )
+
+proc lowerBound*[T](rs: ReactiveSeq[T], key:T): int =
+  rs.lowerBound(key, cmp[T])
+
+proc upperBound*[T](rs: ReactiveSeq[T], key:T): int =
+  rs.upperBound(key, cmp[T])
+
+proc `==`*[T](a: ReactiveSeq[T], b: seq[T]): bool =
+  if a.len != b.len: return false
+  for i in 0..<a.len:
+    let s = a.data[i]
+    if s.isNil or s.value != b[i]: # raw field, no registerDep
+      return false
+  true
+
+proc `==`*[T](a: seq[T], b: ReactiveSeq[T]): bool =
+  b == a  # symmetric
+
+proc `==`*[T](a: seq[Signal[T]], b: seq[T]): bool =
+  if a.len != b.len: return false
+  for i in 0..<a.len:
+    let s = a[i]
+    if s.isNil or s.value != b[i]:
+      return false
+  true
+
+proc `==`*[T](a: seq[T], b: seq[Signal[T]]): bool =
+  b == a  # symmetric

@@ -52,9 +52,9 @@ suite "reactive core without [] overloads":
     let twice = computed(C, () =>
       base.val * 2)
 
-    require twice == 6
+    check twice == 6
     base.set 5
-    require twice == 10
+    check twice == 10
 
   test "Effect re-runs and batching coalesces":
     var x = signal(C, 0)
@@ -64,24 +64,24 @@ suite "reactive core without [] overloads":
       inc hits
     )
 
-    require hits == 1                 # initial run
+    check hits == 1                 # initial run
 
     x.set 1
-    require hits == 2                 # immediate scheduler: runs again
+    check hits == 2                 # immediate scheduler: runs again
 
     transaction(C):                   # two writes, one batch
       x.set 2
       x.set 3
-    require hits == 3                 # only one more run
+    check hits == 3                 # only one more run
 
   test "Undo rolls back last writes":
     var hp = signal(C, 100)
     hp.set 50
     hp.set 20
     undo(C)            # one step
-    require hp == 50
+    check hp == 50
     undo(C, 1)         # another step
-    require hp == 100
+    check hp == 100
 
   test "Queued scheduler defers effects until flush":
     let Q = newReactiveCtx()
@@ -96,10 +96,10 @@ suite "reactive core without [] overloads":
     useQueuedScheduler(Q)
 
     v.set 1
-    require log[^1] == 0              # still old value
+    check log[^1] == 0              # still old value
 
     flushQueued Q
-    require log[^1] == 1
+    check log[^1] == 1
 
   test "Watch runs only on change and respects batching":
     var a = signal(C, 0)
@@ -112,15 +112,15 @@ suite "reactive core without [] overloads":
     )
 
     a.set 1
-    require seen == @[1]
+    check seen == @[1]
 
     a.set 1 # no actual change
-    require seen == @[1]
+    check seen == @[1]
 
     transaction(C): # two writes in one batch
       a.set 2
       a.set 3
-    require seen == @[1, 3] # fired once with final value
+    check seen == @[1, 3] # fired once with final value
 
   test "dumpDeps lists all subscribers":
     var a    = signal(C, 0)
@@ -132,7 +132,7 @@ suite "reactive core without [] overloads":
     )
 
     let deps = dumpDeps(a)
-    require deps.len == 2
+    check deps.len == 2
     echo "dumpDeps lists all subscribers: ", deps
 
   test "Effect cleanup runs before next execution":
@@ -144,13 +144,13 @@ suite "reactive core without [] overloads":
       registerDep tgt              # read signal → dependency
     )
 
-    require fired == 0             # first mount → no cleanup yet
+    check fired == 0             # first mount → no cleanup yet
 
     tgt.set 1
-    require fired == 1
+    check fired == 1
 
     tgt.set 2
-    require fired == 2
+    check fired == 2
 
   test "Disposing context stops further reactions":
     let D = newReactiveCtx()
@@ -162,16 +162,16 @@ suite "reactive core without [] overloads":
       inc hits
     )
 
-    require hits == 1          # initial run
+    check hits == 1          # initial run
     s.set 1
-    require hits == 2          # reacted once
+    check hits == 2          # reacted once
 
     dispose D                  # tear it down
 
     s.set 2
-    require hits == 2          # no further reactions
+    check hits == 2          # no further reactions
     flushQueued D              # queue is already cleared
-    require hits == 2
+    check hits == 2
 
   test "Memo recomputes only on dependency change":
     var base     = signal(C, 1)
@@ -182,58 +182,58 @@ suite "reactive core without [] overloads":
       base.val * 2
     )
 
-    require dbl() == 2
-    require computes == 1
+    check dbl() == 2
+    check computes == 1
 
     discard dbl()
-    require computes == 1
+    check computes == 1
 
     base.set 2
-    require dbl() == 4
-    require computes == 2
+    check dbl() == 4
+    check computes == 2
 
 suite "Undo-stack utilities":
 
   test "Depth grows with every write":
     let U = newReactiveCtx()
     var s = signal(U, 0)
-    require undoDepth(U) == 0
+    check undoDepth(U) == 0
     s.set 1
-    require undoDepth(U) == 1
+    check undoDepth(U) == 1
     s.set 2
-    require undoDepth(U) == 2
+    check undoDepth(U) == 2
 
   test "Depth does not grow on identical write":
     let U = newReactiveCtx()
     var s = signal(U, 1)
     s.set 1             # no change
-    require undoDepth(U) == 0
+    check undoDepth(U) == 0
 
   test "Undo reduces depth":
     let U = newReactiveCtx()
     var s = signal(U, 0)
     s.set 1; s.set 2
     undo(U)             # one step
-    require undoDepth(U) == 1
+    check undoDepth(U) == 1
     undo(U)             # another
-    require undoDepth(U) == 0
+    check undoDepth(U) == 0
 
   test "Undo more than stack is safe":
     let U = newReactiveCtx()
     var s = signal(U, 0)
     s.set 1
     undo(U, 5)          # exceeds depth
-    require undoDepth(U) == 0
-    require s == 0
+    check undoDepth(U) == 0
+    check s == 0
 
   test "clearUndo wipes history":
     let U = newReactiveCtx()
     var s = signal(U, 0)
     s.set 1; s.set 2
     clearUndo(U)
-    require undoDepth(U) == 0
+    check undoDepth(U) == 0
     undo(U)             # no effect
-    require s == 2
+    check s == 2
 
   test "Undo works inside transaction":
     let U = newReactiveCtx()
@@ -241,9 +241,9 @@ suite "Undo-stack utilities":
     transaction(U):
       s.set 1
       s.set 2
-    require undoDepth(U) == 2   # each write pushed
+    check undoDepth(U) == 2   # each write pushed
     undo(U, 2)
-    require s == 0
+    check s == 0
 
   test "Undo stack is per-context":
     let A = newReactiveCtx()
@@ -252,14 +252,14 @@ suite "Undo-stack utilities":
     var sb = signal(B, 0)
     sa.set 1
     sb.set 1; sb.set 2
-    require undoDepth(A) == 1
-    require undoDepth(B) == 2
+    check undoDepth(A) == 1
+    check undoDepth(B) == 2
 
   test "Reads do not affect depth":
     let U = newReactiveCtx()
     var s = signal(U, 0)
     discard s.val
-    require undoDepth(U) == 0
+    check undoDepth(U) == 0
 
   test "Undo after dispose does nothing":
     let U = newReactiveCtx()
@@ -267,15 +267,15 @@ suite "Undo-stack utilities":
     s.set 1
     dispose U
     undo(U)
-    require s == 1
-    require undoDepth(U) == 0
+    check s == 1
+    check undoDepth(U) == 0
 
   test "Undo stack unaffected by memo reads":
     let U = newReactiveCtx()
     var s = signal(U, 1)
     let dbl = memo(U, () => s.val * 2)
     discard dbl()
-    require undoDepth(U) == 0
+    check undoDepth(U) == 0
 
   test "Depth grows only for first write to same value sequence":
     let U = newReactiveCtx()
@@ -283,7 +283,7 @@ suite "Undo-stack utilities":
     s.set 1
     s.set 1          # identical: ignored
     s.set 1          # identical again
-    require undoDepth(U) == 1
+    check undoDepth(U) == 1
 
 suite "Memo behaviour":
 
@@ -295,7 +295,7 @@ suite "Memo behaviour":
       inc cnt
       src.val)
 
-    require cnt == 1            # initial evaluation done by effect
+    check cnt == 1            # initial evaluation done by effect
 
   test "Repeated reads do not recompute":
     let M = newReactiveCtx()
@@ -307,7 +307,7 @@ suite "Memo behaviour":
 
     discard mm()
     discard mm()
-    require cnt == 1            # still cached
+    check cnt == 1            # still cached
 
   test "Recompute only when value really changes":
     let M = newReactiveCtx()
@@ -318,9 +318,9 @@ suite "Memo behaviour":
       src.val)
 
     src.set 1                   # identical – ignored
-    require cnt == 1
+    check cnt == 1
     src.set 2                   # change
-    require cnt == 2
+    check cnt == 2
 
   test "Batched writes trigger one recompute":
     let M = newReactiveCtx()
@@ -333,7 +333,7 @@ suite "Memo behaviour":
     transaction(M):
       src.set 1
       src.set 2
-    require cnt == 2            # exactly one extra evaluation
+    check cnt == 2            # exactly one extra evaluation
 
   test "Memo with two dependencies reacts to either":
     let M = newReactiveCtx()
@@ -345,9 +345,9 @@ suite "Memo behaviour":
       a.val + b.val)
 
     a.set 5
-    require cnt == 2            # once more
+    check cnt == 2            # once more
     b.set 7
-    require cnt == 3
+    check cnt == 3
 
   test "Nested memo cascades once":
     let M = newReactiveCtx()
@@ -364,8 +364,8 @@ suite "Memo behaviour":
       inner() + 1)
 
     src.set 2
-    require innerCnt == 2       # inner recomputed once
-    require outerCnt == 2       # outer recomputed once
+    check innerCnt == 2       # inner recomputed once
+    check outerCnt == 2       # outer recomputed once
 
   test "Dispose stops further memo recompute":
     let D = newReactiveCtx()
@@ -377,7 +377,7 @@ suite "Memo behaviour":
 
     dispose D
     src.set 2
-    require cnt == 1            # no new evaluation after dispose
+    check cnt == 1            # no new evaluation after dispose
 
   test "Undo stack unaffected by memo reads":
     let U = newReactiveCtx()
@@ -385,7 +385,7 @@ suite "Memo behaviour":
     let mm  = memo(U, () => src.val * 2)
 
     discard mm()
-    require undoDepth(U) == 0
+    check undoDepth(U) == 0
 
 suite "Time-travel":
   test "Redo restores state after undo":
@@ -394,9 +394,9 @@ suite "Time-travel":
     s.set 1; s.set 2
     undo(T)           # -> 1
     redo(T)           # -> 2
-    require s == 2
-    require redoDepth(T) == 0
-    require undoDepth(T) == 2
+    check s == 2
+    check redoDepth(T) == 0
+    check undoDepth(T) == 2
 
   test "Redo cleared by new write":
     let T = newReactiveCtx()
@@ -404,7 +404,7 @@ suite "Time-travel":
     s.set 1; s.set 2
     undo(T)           # -> 1
     s.set 3           # new branch
-    require redoDepth(T) == 0
+    check redoDepth(T) == 0
 
   test "Multiple redo steps":
     let T = newReactiveCtx()
@@ -412,7 +412,7 @@ suite "Time-travel":
     s.set 1; s.set 2; s.set 3
     undo(T, 3)
     redo(T, 2)
-    require s == 2
+    check s == 2
 
   test "Snapshot / travel backward":
     let T = newReactiveCtx()
@@ -421,7 +421,7 @@ suite "Time-travel":
     let snap = snapshot(T)
     s.set 2; s.set 3
     travel(T, snap)             # back to value 1
-    require s == 1
+    check s == 1
 
   test "Travel forward again":
     let T = newReactiveCtx()
@@ -431,7 +431,7 @@ suite "Time-travel":
     s.set 2
     travel(T, idx)               # back to 1
     travel(T, idx + 1)           # forward to 2
-    require s == 2
+    check s == 2
 
   test "Travel beyond bounds is no-op":
     let T = newReactiveCtx()
@@ -439,8 +439,8 @@ suite "Time-travel":
     s.set 1
     travel(T, -1)
     travel(T, 999)
-    require s == 1
-    require undoDepth(T) == 1
+    check s == 1
+    check undoDepth(T) == 1
 
   test "Dispose prevents further undo/redo":
     let T = newReactiveCtx()
@@ -449,7 +449,7 @@ suite "Time-travel":
     dispose T
     undo(T)
     redo(T)
-    require s == 1
+    check s == 1
 
   test "Undo then write clears redo stack":
     let T = newReactiveCtx()
@@ -457,7 +457,7 @@ suite "Time-travel":
     s.set 1; s.set 2
     undo(T)                      # back to 1
     s.set 5                      # new write
-    require redoDepth(T) == 0
+    check redoDepth(T) == 0
 
   test "Undo/redo inside transaction":
     let T = newReactiveCtx()
@@ -467,7 +467,7 @@ suite "Time-travel":
       s.set 2
     undo(T, 2)
     redo(T, 2)
-    require s == 2
+    check s == 2
 
   test "Memo value follows time travel":
     let T = newReactiveCtx()
@@ -475,9 +475,9 @@ suite "Time-travel":
     let dbl = memo(T, () => src.val * 2)
     src.set 2
     undo(T)                      # back to 1
-    require dbl() == 2
+    check dbl() == 2
     redo(T)                      # forward to 2
-    require dbl() == 4
+    check dbl() == 4
 
   test "dumpDeps unaffected by history ops":
     let T = newReactiveCtx()
@@ -486,7 +486,7 @@ suite "Time-travel":
     let before = dumpDeps(s)
     s.set 1
     undo(T); redo(T)
-    require dumpDeps(s) == before
+    check dumpDeps(s) == before
 
 suite "Travel edge-cases":
 
@@ -496,27 +496,27 @@ suite "Travel edge-cases":
     s.set 1; s.set 2            # depth = 2, index 2
     let here = snapshot(T)
     travel(T, here)             # same spot
-    require s == 2
-    require undoDepth(T) == here
-    require redoDepth(T) == 0
+    check s == 2
+    check undoDepth(T) == here
+    check redoDepth(T) == 0
 
   test "Travel on fresh context does nothing":
     let T = newReactiveCtx()
     travel(T, 0)
     travel(T, 1)
-    require undoDepth(T) == 0
-    require redoDepth(T) == 0
+    check undoDepth(T) == 0
+    check redoDepth(T) == 0
 
   test "Travel forward then back adjusts redo depth":
     let T = newReactiveCtx()
     var s = signal(T, 0)
     s.set 1; s.set 2; s.set 3            # depth = 3
     travel(T, 1)                         # back to value 1
-    require s == 1
-    require redoDepth(T) == 2
+    check s == 1
+    check redoDepth(T) == 2
     travel(T, 3)                         # forward to tip
-    require s == 3
-    require redoDepth(T) == 0
+    check s == 3
+    check redoDepth(T) == 0
 
   test "Branch after travelling back clears redo":
     let T = newReactiveCtx()
@@ -524,9 +524,9 @@ suite "Travel edge-cases":
     s.set 1; s.set 2
     travel(T, 1)                         # back to 1
     s.set 42                             # new branch
-    require redoDepth(T) == 0
+    check redoDepth(T) == 0
     redo(T)                              # should do nothing
-    require s == 42
+    check s == 42
 
   test "Travel index exactly at far forward bound":
     let T = newReactiveCtx()
@@ -535,8 +535,8 @@ suite "Travel edge-cases":
     let bound = undoDepth(T)             # 2
     undo(T, 2)                           # back to 0
     travel(T, bound)                     # jump to newest
-    require s == 2
-    require redoDepth(T) == 0
+    check s == 2
+    check redoDepth(T) == 0
 
   test "Travel inside transaction is applied after flush":
     let T = newReactiveCtx()
@@ -544,9 +544,9 @@ suite "Travel edge-cases":
     s.set 1; s.set 2; s.set 3            # depth 3
     transaction(T):
       travel(T, 1)                       # request back to value 1
-    require s == 1
-    require undoDepth(T) == 1
-    require redoDepth(T) == 2
+    check s == 1
+    check undoDepth(T) == 1
+    check redoDepth(T) == 2
 
 suite "Writable computed":
 
@@ -560,10 +560,10 @@ suite "Writable computed":
       setter = (p: float) => hp.set p * maxHp.val
     )
 
-    require pct.val == 0.5
+    check pct.val == 0.5
     pct.set 0.75                       # write through computed
-    require hp == 75
-    require pct.val == 0.75            # reflects the change
+    check hp == 75
+    check pct.val == 0.75            # reflects the change
 
   test "Undo rolls back writable computed change":
     let W = newReactiveCtx()
@@ -576,10 +576,10 @@ suite "Writable computed":
     )
 
     pct.set 0.6                        # hp → 60
-    require hp == 60
+    check hp == 60
     undo(W)                            # time-travel one step
-    require hp == 30
-    require pct.val == 0.3
+    check hp == 30
+    check pct.val == 0.3
 
 suite "Persistence":
 
@@ -589,11 +589,11 @@ suite "Persistence":
     var hp = store(P, "hp", 100)
     hp.set 42
     saveState(P, j)
-    require j["hp"].getInt == 42
+    check j["hp"].getInt == 42
 
     hp.set 7               # mutate again
     loadState(P, j)        # restore → 42
-    require hp == 42
+    check hp == 42
 
   test "Autosave after flush":
     let P = newReactiveCtx()
@@ -604,7 +604,7 @@ suite "Persistence":
     score.set 10
     flushQueued P
 
-    require doc["score"].getInt == 10
+    check doc["score"].getInt == 10
 
   test "Autosave after batched transaction":
     let P = newReactiveCtx()
@@ -616,7 +616,7 @@ suite "Persistence":
       s.set 5
       s.set 8                # final value
 
-    require doc["x"].getInt == 8
+    check doc["x"].getInt == 8
 
   test "Dispose triggers final save":
     let P = newReactiveCtx()
@@ -626,7 +626,7 @@ suite "Persistence":
     v.set 4
     dispose P
 
-    require doc["val"].getInt == 4
+    check doc["val"].getInt == 4
 
   test "registerStore works for external signal":
     let P = newReactiveCtx()
@@ -637,7 +637,7 @@ suite "Persistence":
 
     name.set "alice"
     flushQueued P
-    require doc["player"].getStr == "alice"
+    check doc["player"].getStr == "alice"
 
 suite "Edge‑case combinatorial stress":
   #  1 ── autosave after enable→disable→enable again -------------------------
@@ -648,18 +648,18 @@ suite "Edge‑case combinatorial stress":
     enableAutosave(C, A)
     s.set 1
     flushQueued C
-    require A["v"].getInt == 1
+    check A["v"].getInt == 1
 
     disableAutosave(C)
     s.set 2
     flushQueued C
-    require A["v"].getInt == 1            # unchanged
+    check A["v"].getInt == 1            # unchanged
 
     enableAutosave(C, B)                   # new target
     s.set 3
     flushQueued C
-    require B["v"].getInt == 3
-    require A["v"].getInt == 1            # old target untouched
+    check B["v"].getInt == 3
+    check A["v"].getInt == 1            # old target untouched
 
   #  2 ── undo after autosave restores pre‑autosave value --------------------
   test "Undo reverses value saved by autosave":
@@ -669,12 +669,12 @@ suite "Edge‑case combinatorial stress":
     enableAutosave(C, doc)
     s.set 20             # change → autosave
     flushQueued C
-    require doc["hp"].getInt == 20
+    check doc["hp"].getInt == 20
 
     undo(C)              # back to 10
-    require s == 10
+    check s == 10
     flushQueued C        # autosave again
-    require doc["hp"].getInt == 10
+    check doc["hp"].getInt == 10
 
   #  3 ── loadState inside a transaction coalesces one history push ----------
   test "loadState inside transaction pushes once":
@@ -686,7 +686,7 @@ suite "Edge‑case combinatorial stress":
 
     transaction(C):
       loadState(C, snap)      # should revert to 5 (already is)
-    require undoDepth(C) == 1 # only the earlier set(5)
+    check undoDepth(C) == 1 # only the earlier set(5)
 
   #  4 ── writable computed + autosave + undo -------------------------------
   test "Writable computed integrates with autosave & undo":
@@ -701,14 +701,14 @@ suite "Edge‑case combinatorial stress":
 
     wc.set 20                # base becomes 10
     flushQueued C
-    require val == 10
-    require wc.val == 20
-    require storeDoc["base"].getInt == 10
+    check val == 10
+    check wc.val == 20
+    check storeDoc["base"].getInt == 10
 
     undo(C)
-    require val == 2
+    check val == 2
     flushQueued C
-    require storeDoc["base"].getInt == 2
+    check storeDoc["base"].getInt == 2
 
   #  5 ── dispose during batched transaction still snapshots -----------------
   test "Dispose inside transaction takes final snapshot":
@@ -720,7 +720,7 @@ suite "Edge‑case combinatorial stress":
     transaction(C):
       x.set 99
       dispose C                 # should flush & snapshot
-    require js["x"].getInt == 99
+    check js["x"].getInt == 99
 
   #  6 ── loadState with missing keys leaves existing values -----------------
   test "loadState ignores unknown keys":
@@ -728,7 +728,7 @@ suite "Edge‑case combinatorial stress":
     var foo = store(C, "foo", 1)
     var j = %*{ "bar": 42 }
     loadState(C, j)
-    require foo == 1
+    check foo == 1
 
   #  7 ── registerStore twice for same key keeps latest state ----------------
   test "Double registration same key persists most recent":
@@ -740,7 +740,7 @@ suite "Edge‑case combinatorial stress":
     enableAutosave(C, doc)
     b.set 77
     flushQueued C
-    require doc["k"].getInt == 77
+    check doc["k"].getInt == 77
 
   #  8 ── deep undo/redo after loadState snapshot ---------------------------
   test "Undo after loadState toggles between snapshots":
@@ -753,9 +753,9 @@ suite "Edge‑case combinatorial stress":
     n.set 9                     # advance to 9
 
     loadState(C, j)            # back to 5 via setters
-    require n == 5
+    check n == 5
     undo(C)                    # should go to 9
-    require n == 9
+    check n == 9
 
   #  9 ── autosave with immediate scheduler when no batch -------------------
   test "Autosave fires even if queue empty":
@@ -764,7 +764,7 @@ suite "Edge‑case combinatorial stress":
     var s = store(C, "z", 1)
     enableAutosave(C, doc)
     flushQueued C              # nothing changed yet → still 1
-    require doc["z"].getInt == 1
+    check doc["z"].getInt == 1
 
   # 10 ── time travel after autosave-----------------------------------------
   test "Travel adjusts autosave correctly":
@@ -774,15 +774,15 @@ suite "Edge‑case combinatorial stress":
     s.set 1; s.set 2
     enableAutosave(C, js)
     flushQueued C
-    require js["v"].getInt == 2
+    check js["v"].getInt == 2
 
     undo(C, 2)                 # back to 0
     flushQueued C
-    require js["v"].getInt == 0
+    check js["v"].getInt == 0
 
     redo(C, 1)                 # to 1
     flushQueued C
-    require js["v"].getInt == 1
+    check js["v"].getInt == 1
 
   # 11 ── loadState followed by redo is no‑op -------------------------------
   test "Redo after loadState has no effect":
@@ -790,7 +790,7 @@ suite "Edge‑case combinatorial stress":
     var s = store(C, "p", 0)
     s.set 5; loadState(C, newJObject())  # loads nothing → p unchanged
     redo(C)
-    require s == 5                       # redo depth should be 0
+    check s == 5                       # redo depth should be 0
 
   # 12 ── create many store signals and bulk save ---------------------------
   test "Bulk save 50 keys":
@@ -800,7 +800,7 @@ suite "Edge‑case combinatorial stress":
     var obj: JsonNode
     saveState(C, obj)
     for i in 0 ..< 49:
-      require obj[$i].getInt == i
+      check obj[$i].getInt == i
 
   # 13 ── high frequency writes inside one frame ---------------------------
   test "Hundreds of writes still single autosave":
@@ -811,7 +811,7 @@ suite "Edge‑case combinatorial stress":
     for i in 1 .. 500:
       s.set i
     flushQueued C                  # one flush
-    require doc["cnt"].getInt == 500
+    check doc["cnt"].getInt == 500
 
   # 14 ── disposing twice is safe ------------------------------------------
   test "Double dispose safe":
@@ -826,7 +826,7 @@ suite "Edge‑case combinatorial stress":
     dispose C
     var jj = %*{ "w": 9 }
     loadState(C, jj)
-    require s == 1
+    check s == 1
 
   # 16 ── autosave disabled then dispose -> no final save -------------------
   test "No snapshot when autosave disabled before dispose":
@@ -838,7 +838,7 @@ suite "Edge‑case combinatorial stress":
     disableAutosave(C)
     s.set 5
     dispose C
-    require doc.isNil or not doc.hasKey("k") or doc["k"].getInt == 2
+    check doc.isNil or not doc.hasKey("k") or doc["k"].getInt == 2
 
 
   # 19 ── registerStore after first save adds new key next flush -----------
@@ -851,7 +851,7 @@ suite "Edge‑case combinatorial stress":
     registerStore(C, "later", s)
     s.set 9
     flushQueued C
-    require doc["later"].getInt == 9
+    check doc["later"].getInt == 9
 
   # 20 ── watch selector updates autosave only when changed -----------------
   test "Watch plus autosave only serialises on change":
@@ -869,8 +869,8 @@ suite "Edge‑case combinatorial stress":
     base.set 4     # parity stays 0        (no more fires)
     flushQueued C
 
-    require hits == 1
-    require js["b"].getInt == 4
+    check hits == 1
+    check js["b"].getInt == 4
 
 
   # 21 ── snapshot/index travel after autosave updates node -----------------
@@ -884,11 +884,11 @@ suite "Edge‑case combinatorial stress":
     let idx = snapshot(C)
     s.set 22
     flushQueued C
-    require doc["t"].getInt == 22
+    check doc["t"].getInt == 22
 
     travel(C, idx)   # back to 11
     flushQueued C
-    require doc["t"].getInt == 11
+    check doc["t"].getInt == 11
 
   # 22 ── dispose immediately after enableAutosave captures initial state ---
   test "Enable then dispose without writes":
@@ -897,7 +897,7 @@ suite "Edge‑case combinatorial stress":
     var s = store(C, "q", 7)
     enableAutosave(C, node)   # initial snapshot should already contain q
     dispose C
-    require node["q"].getInt == 7
+    check node["q"].getInt == 7
 
   # 23 ── autosave reuses same node object (no replace) ---------------------
   test "saveInto mutates not replaces JsonNode":
@@ -908,7 +908,7 @@ suite "Edge‑case combinatorial stress":
     var v = store(C, "k", 1)
     v.set 2
     flushQueued C
-    require (addr node) == origAddr
+    check (addr node) == origAddr
 
   # 24 ── high‑volume undo with autosave ------------------------------------
   test "500 undo steps with autosave stable":
@@ -919,11 +919,11 @@ suite "Edge‑case combinatorial stress":
     for i in 1..500:
       s.set i
     flushQueued C
-    require node["n"].getInt == 500
+    check node["n"].getInt == 500
 
     undo(C, 500)
     flushQueued C
-    require node["n"].getInt == 0
+    check node["n"].getInt == 0
 
   # 25 ── undo/redo after disposing autosave node reference -----------------
   test "Node alias retains last snapshot even after ctx disposed":
@@ -933,7 +933,7 @@ suite "Edge‑case combinatorial stress":
     enableAutosave(C, node)
     s.set 4
     dispose C
-    require node["z"].getInt == 4
+    check node["z"].getInt == 4
 
 
 suite "peek / untracked read":
@@ -948,15 +948,15 @@ suite "peek / untracked read":
       inc hits
     )
 
-    require hits == 1        # initial mount
+    check hits == 1        # initial mount
 
     a.set 42                 # would retrigger if tracked
-    require hits == 1        # still 1 → no dependency captured
+    check hits == 1        # still 1 → no dependency captured
 
   test "peek value equals normal read":
     let C = newReactiveCtx()
     var s = signal(C, 7)
-    require peek(s) == s.val
+    check peek(s) == s.val
 
 suite "effectOnce":
 
@@ -970,10 +970,10 @@ suite "effectOnce":
       inc hits
     )
 
-    require hits == 1      # initial call
+    check hits == 1      # initial call
 
     s.set 1                # would re-run a normal effect
-    require hits == 1      # still only once
+    check hits == 1      # still only once
 
 
 suite "watchNow":
@@ -986,7 +986,7 @@ suite "watchNow":
       () => a.val,                   # selector
       proc(n, o: int) = firstSeen = n)
 
-    require firstSeen == 7           # handler ran immediately
+    check firstSeen == 7           # handler ran immediately
 
   test "Immediate flag false keeps old behaviour":
     let C = newReactiveCtx()
@@ -996,9 +996,9 @@ suite "watchNow":
       () => a.val,
       (n,o:int) => seen.add n,       # immediate defaults to false
     )
-    require seen.len == 0            # no first fire
+    check seen.len == 0            # no first fire
     a.set 1
-    require seen == @[1]
+    check seen == @[1]
 
 
 
@@ -1016,23 +1016,23 @@ suite "Reactive object wrapper":
 
     p.hp += 50                        # write via '+=' sugar
     flushQueued C
-    require p.hp.val == 150
-    require hits == 2                 # first mount + after change
+    check p.hp.val == 150
+    check hits == 2                 # first mount + after change
 
   test "toPlain snapshot is decoupled":
     let C = newReactiveCtx()
     var p = C.toReactive(Player(name: "H", hp: 1, x: 1, y: 2))
     let snap = p.toPlain()
-    require snap.hp == 1
+    check snap.hp == 1
     p.hp += 9
-    require snap.hp == 1              # unchanged – deep copy
+    check snap.hp == 1              # unchanged – deep copy
 
   test "Undo restores wrapper field":
     let C = newReactiveCtx()
     var p = C.toReactive(Player(name: "h", hp: 10, x: 0, y: 0))
     p.hp.set 20
     undo C
-    require p.hp.val == 10
+    check p.hp.val == 10
 
   test "Wrapper fields integrate with persistence":
     let C = newReactiveCtx()
@@ -1044,7 +1044,7 @@ suite "Reactive object wrapper":
 
     p.hp += 5
     flushQueued C
-    require doc["player_hp"].getInt == 10
+    check doc["player_hp"].getInt == 10
 
   test "Multiple fields batched in one transaction":
     let C = newReactiveCtx()
@@ -1060,9 +1060,9 @@ suite "Reactive object wrapper":
     transaction(C):
       p.x += 3.0
       p.y += 4.0
-    require hits == 2                 # initial + once after batch
-    require p.x.val == 3.0
-    require p.y.val == 4.0
+    check hits == 2                 # initial + once after batch
+    check p.x.val == 3.0
+    check p.y.val == 4.0
 
 
 suite "Reactive deep‑nest regression suite (D‑types)":
@@ -1075,8 +1075,8 @@ suite "Reactive deep‑nest regression suite (D‑types)":
 
     v.x += 2.5
     flushQueued C
-    require v.x.val == 2.5
-    require hits == 2
+    check v.x.val == 2.5
+    check hits == 2
 
   test "Nested object propagates":
     let C = newReactiveCtx()
@@ -1086,21 +1086,21 @@ suite "Reactive deep‑nest regression suite (D‑types)":
 
     s.pos.y += 3
     flushQueued C
-    require logs == @[1, 4]
+    check logs == @[1, 4]
 
   test "Undo works across depths":
     let C = newReactiveCtx()
     var p = C.toReactive(PlayerD(name: "bob", stats: StatsD(hp: 20, mp: 0, pos: Vec2(x:0,y:0))))
     p.stats.hp += 15
     undo C
-    require p.stats.hp.val == 20
+    check p.stats.hp.val == 20
 
   test "toPlain snapshot full depth":
     let C = newReactiveCtx()
     var p = C.toReactive(PlayerD(name: "ela", stats: StatsD(hp: 5, mp: 5, pos: Vec2(x:2,y:3))))
     let snap = toPlain p
     p.stats.pos.x += 10
-    require snap.stats.pos.x == 2
+    check snap.stats.pos.x == 2
 
   test "Batched deep writes fire once":
     let C = newReactiveCtx()
@@ -1112,7 +1112,7 @@ suite "Reactive deep‑nest regression suite (D‑types)":
       p.stats.hp += 1
       p.stats.mp += 1
     flushQueued C
-    require cnt == 2   # mount + batch flush
+    check cnt == 2   # mount + batch flush
 
   test "Travel with nested object state":
     let C = newReactiveCtx()
@@ -1121,7 +1121,7 @@ suite "Reactive deep‑nest regression suite (D‑types)":
     let snap = snapshot(C)
     p.stats.hp -= 15
     travel(C, snap)
-    require p.stats.hp.val == 40
+    check p.stats.hp.val == 40
 
   test "Writable nested computed field":
     let C = newReactiveCtx()
@@ -1132,9 +1132,9 @@ suite "Reactive deep‑nest regression suite (D‑types)":
       setter = (p: float) => s.hp.set (p * 100.0).int)
 
     pctHp.set 0.75
-    require s.hp.val == 75
+    check s.hp.val == 75
     undo C
-    require s.hp.val == 50
+    check s.hp.val == 50
 
 
 suite "Extended combinatorial tests (added)":
@@ -1148,10 +1148,10 @@ suite "Extended combinatorial tests (added)":
     p.stats.hp += 5        # 15
     p.stats.hp += 10       # 25
     flushQueued C
-    require node["ply"].getInt == 25
+    check node["ply"].getInt == 25
     undo C                 # back to 15
     flushQueued C
-    require node["ply"].getInt == 15
+    check node["ply"].getInt == 15
 
   test "Effect cleanup fires for nested signal":
     let C = newReactiveCtx()
@@ -1161,7 +1161,7 @@ suite "Extended combinatorial tests (added)":
       onCleanup(proc() = cleanups.inc)
       discard v.y.val)
     v.y += 1
-    require cleanups == 1
+    check cleanups == 1
 
   test "Memo chain across nested objects":
     let C = newReactiveCtx()
@@ -1169,7 +1169,7 @@ suite "Extended combinatorial tests (added)":
     let dblHp = memo(C, () => s.hp.val * 2)
     let tripleHp = memo(C, () => dblHp() * 3)
     s.hp += 1
-    require tripleHp() == (3 * 2) * 3   # (hp=3) → dbl=6 → triple=18
+    check tripleHp() == (3 * 2) * 3   # (hp=3) → dbl=6 → triple=18
 
   test "Disable → re‑enable autosave keeps old node untouched":
     let C = newReactiveCtx()
@@ -1184,24 +1184,24 @@ suite "Extended combinatorial tests (added)":
     enableAutosave(C, B)
     hp.set 40
     flushQueued C
-    require A["hp"].getInt == 20
-    require B["hp"].getInt == 40
+    check A["hp"].getInt == 20
+    check B["hp"].getInt == 40
 
   test "dumpDeps on nested field lists subscribers":
     let C = newReactiveCtx()
     var p = C.toReactive(PlayerD(name:"cc", stats: StatsD(hp:1, mp:1, pos: Vec2(x:0,y:0))))
     effect(C, () => (discard p.stats.hp.val))
     let deps = dumpDeps(p.stats.hp)
-    require deps.len == 1
+    check deps.len == 1
 
   test "clearUndo then new write resets depth":
     let C = newReactiveCtx()
     var s = signal(C, 0)
     s.set 1; s.set 2
     clearUndo C
-    require undoDepth(C) == 0
+    check undoDepth(C) == 0
     s.set 3
-    require undoDepth(C) == 1
+    check undoDepth(C) == 1
 
   test "EffectOnce with nested read remains single execution":
     let C = newReactiveCtx()
@@ -1209,7 +1209,7 @@ suite "Extended combinatorial tests (added)":
     var calls = 0
     effectOnce(C, proc() = discard v.x.val; calls.inc)
     v.x += 1
-    require calls == 1
+    check calls == 1
 
   test "Transaction inside transaction correctly nests batching":
     let C = newReactiveCtx()
@@ -1221,7 +1221,7 @@ suite "Extended combinatorial tests (added)":
       transaction(C):
         s += 1
       s += 1
-    require hits == 2   # mount + one after outer flush
+    check hits == 2   # mount + one after outer flush
 
   test "Multiple snapshots and travel chain":
     let C = newReactiveCtx()
@@ -1232,9 +1232,9 @@ suite "Extended combinatorial tests (added)":
     let i2 = snapshot(C)
     hp.set 20
     travel(C, i1)    # back to 10
-    require hp.val == 10
+    check hp.val == 10
     travel(C, i2)    # forward to 15
-    require hp.val == 15
+    check hp.val == 15
 
   test "Snapshot, travel, undo/redo round-trip on nested signal":
     ## 1. set-up -------------------------------------------------------------
@@ -1252,18 +1252,18 @@ suite "Extended combinatorial tests (added)":
 
     ## 5. travel back to baseline -------------------------------------------
     travel(C, snap0)             # hp should revert to 5
-    require pj.stats.hp.val == 5
+    check pj.stats.hp.val == 5
 
     ## 6. travel forward again ----------------------------------------------
     travel(C, snap1)             # hp should be 25
-    require pj.stats.hp.val == 25
+    check pj.stats.hp.val == 25
 
     ## 7. undo / redo sanity -------------------------------------------------
     undo(C)                      # back to 5
-    require pj.stats.hp.val == 5
+    check pj.stats.hp.val == 5
 
     redo(C)                      # forward to 25
-    require pj.stats.hp.val == 25
+    check pj.stats.hp.val == 25
 
   test "Nested signal persists & rolls back":
     ## 1. context, wrapper instance and store --------------------------------
@@ -1277,24 +1277,24 @@ suite "Extended combinatorial tests (added)":
     ## Enable autosave and trigger first snapshot
     enableAutosave(C, doc)       # doc = { "hp": 5 } immediately
     flushQueued C
-    require doc["hp"].getInt == 5
+    check doc["hp"].getInt == 5
 
     ## 2. mutate nested field -------------------------------------------------
     pj.stats.hp += 12            # hp -> 17
     flushQueued C                # autosave after write
-    require doc["hp"].getInt == 17
+    check doc["hp"].getInt == 17
 
     ## 3. undo – autosave should follow after flush ---------------------------
     undo(C)                      # hp -> 5
     flushQueued C
-    require pj.stats.hp.val == 5
-    require doc["hp"].getInt == 5
+    check pj.stats.hp.val == 5
+    check doc["hp"].getInt == 5
 
     ## 4. redo – autosave tracks forward state --------------------------------
     redo(C)                      # hp -> 17
     flushQueued C
-    require pj.stats.hp.val == 17
-    require doc["hp"].getInt == 17
+    check pj.stats.hp.val == 17
+    check doc["hp"].getInt == 17
 
 suite "ReactiveSeq":
 
@@ -1307,18 +1307,18 @@ suite "ReactiveSeq":
       discard rs.len          # depend on length
       inc hits)
 
-    require hits == 1
+    check hits == 1
     rs.push "c"               # len -> 3
-    require rs.len == 3
-    require hits == 2
+    check rs.len == 3
+    check hits == 2
 
     undo C                    # remove "c"
-    require rs.len == 2
-    require hits == 3
+    check rs.len == 2
+    check hits == 3
 
     redo C                    # re-add "c"
-    require rs.len == 3
-    require hits == 4
+    check rs.len == 3
+    check hits == 4
 
   test "multiple mutators inside transaction coalesce":
     let C  = newReactiveCtx()
@@ -1330,18 +1330,18 @@ suite "ReactiveSeq":
       rs.push 4
       rs.push 5
       rs.removeIdx 0          # delete first
-    require rs.len == 4       # 3 + 2 pushes – 1 delete
-    require fires == 2        # mount + one batch flush
-    require undoDepth(C) == 1 # one history entry
+    check rs.len == 4       # 3 + 2 pushes – 1 delete
+    check fires == 2        # mount + one batch flush
+    check undoDepth(C) == 1 # one history entry
 
   test "clear then undo restores entire sequence":
     let C  = newReactiveCtx()
     var rs = C.toReactive(@["x","y","z"])
     rs.clear()
-    require rs.len == 0
+    check rs.len == 0
     undo C
-    require rs.len == 3
-    require rs.data == @["x","y","z"]
+    check rs.len == 3
+    check rs.data == @["x","y","z"]
 
   test "peekLen does not create dependency":
     let C  = newReactiveCtx()
@@ -1351,7 +1351,7 @@ suite "ReactiveSeq":
       discard peekLen(rs)     # untracked
       runs.inc)
     rs.push 11
-    require runs == 1         # did NOT retrigger
+    check runs == 1         # did NOT retrigger
 
 suite "Frame scheduler":
 
@@ -1364,21 +1364,21 @@ suite "Frame scheduler":
     var hits = 0
     effect(C, () => (discard s.val; hits.inc))
 
-    require hits == 1           # mount
+    check hits == 1           # mount
 
     s.set 10                    # schedule reaction
-    require hits == 1           # not yet flushed
-    require frameTasks.len == 1
+    check hits == 1           # not yet flushed
+    check frameTasks.len == 1
 
     # ─ next frame ─
     for t in frameTasks: t()
     frameTasks.setLen 0
-    require hits == 2           # flushed
+    check hits == 2           # flushed
 
     # second write in same frame re-uses existing flush
     s.set 20
     s.set 30
-    require frameTasks.len == 1 # still one pending flush
+    check frameTasks.len == 1 # still one pending flush
 
   test "Transaction batches and flushes once next frame":
     let C  = newReactiveCtx()
@@ -1392,11 +1392,11 @@ suite "Frame scheduler":
     transaction(C):
       x.set 1
       x.set 2                    # two writes, still same frame
-    require fires == 1           # not flushed yet
-    require tasks.len == 1
+    check fires == 1           # not flushed yet
+    check tasks.len == 1
 
     tasks[0]()                   # run flush
-    require fires == 2           # exactly once more
+    check fires == 2           # exactly once more
 
   test "Autosave integrates with frame scheduler":
     let C  = newReactiveCtx()
@@ -1408,10 +1408,10 @@ suite "Frame scheduler":
     enableAutosave(C, doc)       # initial snapshot   (score = 0)
 
     score.set 42                 # mark dirty
-    require (doc["score"].getInt == 0)     # not flushed yet
+    check (doc["score"].getInt == 0)     # not flushed yet
 
     queued[0]()                  # frame flush
-    require doc["score"].getInt == 42
+    check doc["score"].getInt == 42
 
 suite "ReactiveTable":
 
@@ -1426,20 +1426,20 @@ suite "ReactiveTable":
       discard rt.len
       hits.inc)
 
-    require rt.len == 1
-    require hits == 1              # mount
+    check rt.len == 1
+    check hits == 1              # mount
 
     rt.put("b", 2)                 # +1 entry
-    require rt.len == 2
-    require hits == 2
+    check rt.len == 2
+    check hits == 2
 
     undo C                         # remove "b"
-    require rt.len == 1
-    require hits == 3
+    check rt.len == 1
+    check hits == 3
 
     redo C
-    require rt.len == 2
-    require hits == 4
+    check rt.len == 2
+    check hits == 4
 
   test "batched mutations coalesce into one history entry":
     let C = newReactiveCtx()
@@ -1451,9 +1451,9 @@ suite "ReactiveTable":
       rt.put(1, "x")
       rt.put(2, "y")
       rt.delKey(1)
-    require rt.len == 1
-    require fires == 2             # mount + one batch flush
-    require undoDepth(C) == 1
+    check rt.len == 1
+    check fires == 2             # mount + one batch flush
+    check undoDepth(C) == 1
 
   test "clear then undo restores full content":
     let C = newReactiveCtx()
@@ -1461,11 +1461,11 @@ suite "ReactiveTable":
     tbl[1] = 1; tbl[2] = 2
     var rt = C.toReactive(tbl)
     rt.clear()
-    require rt.len == 0
+    check rt.len == 0
     undo C
-    require rt.len == 2
+    check rt.len == 2
     redo C
-    require rt.len == 0
+    check rt.len == 0
 
   test "peekLen does not capture dependency":
     let C = newReactiveCtx()
@@ -1476,7 +1476,7 @@ suite "ReactiveTable":
       discard peekLen(rt)
       runs.inc)
     rt.put("b", 2)
-    require runs == 1              # effect did not re-run
+    check runs == 1              # effect did not re-run
 
 suite "ReactiveSeq element-signals":
 
@@ -1486,18 +1486,18 @@ suite "ReactiveSeq element-signals":
     var seen: seq[int]
     effect(C, () => (discard rs[1].val; seen.add rs[1].val))
     rs[1] += 5               # 20 → 25   (no structural change)
-    require rs[1].val == 25
-    require rs.len == 2
-    require seen == @[20, 25]
+    check rs[1].val == 25
+    check rs.len == 2
+    check seen == @[20, 25]
 
   test "undo / redo on element value":
     let C = newReactiveCtx()
     var rs = C.toReactive(@[1])
     rs[0] += 9               # -> 10
     undo C
-    require rs[0].val == 1
+    check rs[0].val == 1
     redo C
-    require rs[0].val == 10
+    check rs[0].val == 10
 
   test "autosave persists element value":
     let C = newReactiveCtx()
@@ -1507,7 +1507,7 @@ suite "ReactiveSeq element-signals":
     enableAutosave(C, doc)
     rs[0] += 7                         # -> 10
     flushQueued C
-    require doc["first"].getInt == 10
+    check doc["first"].getInt == 10
 
   test "insert keeps previous signals alive":
     let C = newReactiveCtx()
@@ -1515,15 +1515,15 @@ suite "ReactiveSeq element-signals":
     let sigA = rs[0]         # hold reference to first element
     rs.insert(1, "b")        # now ["a","b","c"]
     sigA.set "z"
-    require rs[0].val == "z"   # the same signal was updated
-    require rs.len == 3
+    check rs[0].val == "z"   # the same signal was updated
+    check rs.len == 3
 
   test "iterator yields plain values":
     let C = newReactiveCtx()
     var rs = C.toReactive(@[1,2,3])
     var sum = 0
     for v in rs: sum += v
-    require sum == 6
+    check sum == 6
 
 suite "ReactiveTable element-signals":
 
@@ -1536,10 +1536,10 @@ suite "ReactiveTable element-signals":
     var hits = 0
     effect(C, () => (discard rt[1].val; hits.inc))
 
-    require hits == 1
+    check hits == 1
     rt[1] = "ogre"          # element write
-    require hits == 2
-    require rt.len == 1
+    check hits == 2
+    check rt.len == 1
 
   test "undo / redo on element value":
     let C = newReactiveCtx()
@@ -1547,9 +1547,9 @@ suite "ReactiveTable element-signals":
     rt.put("hp", 10)
     rt["hp"] += 5           # -> 15
     undo C
-    require rt["hp"].val == 10
+    check rt["hp"].val == 10
     redo C
-    require rt["hp"].val == 15
+    check rt["hp"].val == 15
 
   test "structural and value edits coalesce correctly":
     let C = newReactiveCtx()
@@ -1561,8 +1561,8 @@ suite "ReactiveTable element-signals":
       rt.put(1, 10)         # structural
       rt.put(1, 12)         # value-only
       rt.put(2, 20)         # structural
-    require fires == 2      # mount + one flush
-    require undoDepth(C) == 1
+    check fires == 2      # mount + one flush
+    check undoDepth(C) == 1
 
   test "autosave nested value":
     let C = newReactiveCtx()
@@ -1572,7 +1572,7 @@ suite "ReactiveTable element-signals":
     enableAutosave(C, doc)
     rt.put("hp", 8)
     flushQueued C
-    require doc["hp"].getInt == 8
+    check doc["hp"].getInt == 8
 
 suite "Complex combinatorial integration":
 
@@ -1590,17 +1590,17 @@ suite "Complex combinatorial integration":
       rs[0] += 3              # value-only
       rt[1] += 4              # value-only
 
-    require rs == @[3, 2]
-    require rt[1].val == 14
-    require fires == 2                  # mount + one flush
-    require undoDepth(C) == 4           # 2 value + 2 structural entries
+    check rs == @[3, 2]
+    check rt[1].val == 14
+    check fires == 2                  # mount + one flush
+    check undoDepth(C) == 4           # 2 value + 2 structural entries
 
     undo(C, 4)                          # roll back the entire tx
-    require rs == @[0]
-    require rt.len == 0
+    check rs == @[0]
+    check rt.len == 0
     redo(C, 4)                          # forward again
-    require rs == @[3, 2]
-    require rt[1].val == 14
+    check rs == @[3, 2]
+    check rt[1].val == 14
 
   # 2 ── autosave in frame-scheduler path with structural+value edits ───────
   test "Frame scheduler + autosave deep mix":
@@ -1618,11 +1618,11 @@ suite "Complex combinatorial integration":
     # mutate – should schedule ONE frame flush
     rs[0] += 4
     rt.put("kills", 3)
-    require queue.len == 1
+    check queue.len == 1
     queue[0]()                           # next frame
 
-    require doc["first"].getInt == 5     # 1+4
-    require doc["cnt"].getInt   == 1
+    check doc["first"].getInt == 5     # 1+4
+    check doc["cnt"].getInt   == 1
 
   # 3 ── time-travel through mixed structural + value history ---------------
   test "Travel across structural+value snapshots":
@@ -1636,15 +1636,15 @@ suite "Complex combinatorial integration":
     let snap2 = snapshot(C)              # depth = 2
 
     rt[1] = "b"                          # value-only
-    require undoDepth(C) == 3
+    check undoDepth(C) == 3
 
     travel(C, snap1)                     # back to state after first insert
-    require rs == @[10,20]
-    require rt[1].val == "a"
+    check rs == @[10,20]
+    check rt[1].val == "a"
 
     travel(C, snap2)                     # forward one
-    require rs == @[10,25]
-    require rt[1].val == "a"
+    check rs == @[10,25]
+    check rt[1].val == "a"
 
   # 4 ── registerStore on non-existent element then mutate ------------------
   test "Late key accessor safe for persistence":
@@ -1656,7 +1656,7 @@ suite "Complex combinatorial integration":
     flushQueued C                        # first snapshot (hp = 0)
     rt["hp"] += 9                        # value write
     flushQueued C
-    require doc["hp"].getInt == 9
+    check doc["hp"].getInt == 9
 
   # 5 ── deep dispose mid-transaction still snapshots -----------------------
   test "Dispose inside nested batch with seq+table":
@@ -1672,11 +1672,11 @@ suite "Complex combinatorial integration":
       dispose C                  # inside batch – should flush once
 
     # lenS not stored
-    require not js.hasKey("cnt")
-    require not js.hasKey("score")
+    check not js.hasKey("cnt")
+    check not js.hasKey("score")
 
     # but rs structural signal created; autosave captured new seq length
-    require rs.len == 1
+    check rs.len == 1
 
 suite "Memo advanced behaviour":
 
@@ -1688,10 +1688,10 @@ suite "Memo advanced behaviour":
       inc tick
       (src.val mod 2) == 0)
 
-    require even() == false
+    check even() == false
     src.set 3          # selector returns false again
-    require even() == false
-    require tick == 2  # exactly one extra evaluation
+    check even() == false
+    check tick == 2  # exactly one extra evaluation
 
   test "Memo ignores structural change with identical elements":
     let C = newReactiveCtx()
@@ -1702,8 +1702,8 @@ suite "Memo advanced behaviour":
       rs[0].val + rs[1].val)
 
     rs.push 0          # length change, but memo does NOT read len
-    require sum() == 3
-    require runs == 1  # no recompute
+    check sum() == 3
+    check runs == 1  # no recompute
 
   test "Memo survives deep undo/redo chain":
     let C   = newReactiveCtx()
@@ -1712,9 +1712,9 @@ suite "Memo advanced behaviour":
     src.set 2
     src.set 3
     undo(C, 2)         # back to 1
-    require dbl() == 2
+    check dbl() == 2
     redo(C, 2)         # forward to 3
-    require dbl() == 6
+    check dbl() == 6
 
 suite "ReactiveSeq effect reactivity":
 
@@ -1729,7 +1729,7 @@ suite "ReactiveSeq effect reactivity":
 
     rs.push "b"                   # structural change
     rs[1].set "B"                 # element change
-    require log == @["a", "B"]
+    check log == @["a", "B"]
 
   test "Effect sees edits with queued scheduler":
     let C   = newReactiveCtx()
@@ -1745,7 +1745,7 @@ suite "ReactiveSeq effect reactivity":
     rs[0].set 9
     rs[1].set 8
     flushQueued C
-    require snap == @[9, 8]
+    check snap == @[9, 8]
 
   test "One flush per transaction despite mixed edits":
     let C   = newReactiveCtx()
@@ -1760,8 +1760,8 @@ suite "ReactiveSeq effect reactivity":
       rs.push 2           # structural
       rs[0].set 5         # value
       rs[1].set 6         # value
-    require hits == 2     # mount + one batch flush
-    require rs.toPlain == @[5, 6]
+    check hits == 2     # mount + one batch flush
+    check rs.toPlain == @[5, 6]
 
 suite "Context isolation":
 
@@ -1778,14 +1778,14 @@ suite "Context isolation":
     effect(A, () => (discard a.val; hitsA.inc))
     effect(B, () => (discard b.val; hitsB.inc))
 
-    require (hitsA, hitsB) == (1, 1)   # initial mounts
+    check (hitsA, hitsB) == (1, 1)   # initial mounts
 
     a.set 10
-    require (a.val, b.val) == (10, 2)
-    require (hitsA, hitsB) == (2, 1)    # only A reacted
+    check (a.val, b.val) == (10, 2)
+    check (hitsA, hitsB) == (2, 1)    # only A reacted
 
     b.set 20
-    require (hitsA, hitsB) == (2, 2)    # now B reacted
+    check (hitsA, hitsB) == (2, 2)    # now B reacted
 
   test "Undo/redo confined to originating context":
     let C1 = newReactiveCtx()
@@ -1796,9 +1796,9 @@ suite "Context isolation":
     s1.set 7            # history C1 depth = 1
     s2.set 13           # history C2 depth = 1
     undo(C1)
-    require (s1.val, s2.val) == (0, 13)
+    check (s1.val, s2.val) == (0, 13)
     redo(C1)
-    require (s1.val, s2.val) == (7, 13)
+    check (s1.val, s2.val) == (7, 13)
 
 suite "Scheduler interaction":
 
@@ -1809,7 +1809,7 @@ suite "Scheduler interaction":
     var s = signal(C, 1)
     var log: seq[int]
     effect(C, () => (discard s.val; log.add s.val))
-    require log == @[1]            # mount
+    check log == @[1]            # mount
 
     transaction(C):                # inner writes will queue exactly once
       s += 1
@@ -1817,9 +1817,9 @@ suite "Scheduler interaction":
         s += 2
       s += 3                       # net +6 → 7
 
-    require log[^1] == 1           # not flushed yet
+    check log[^1] == 1           # not flushed yet
     flushQueued C
-    require log[^1] == 7           # single reaction flush
+    check log[^1] == 7           # single reaction flush
 
   test "Frame scheduler flush composes with queued autosave":
     let C = newReactiveCtx()
@@ -1831,11 +1831,11 @@ suite "Scheduler interaction":
     enableAutosave(C, doc)         # initial snapshot hp=10
 
     hp.set 42                      # mark dirty, schedule frame‑flush
-    require doc["hp"].getInt == 10   # not flushed yet
-    require frameTasks.len == 1
+    check doc["hp"].getInt == 10   # not flushed yet
+    check frameTasks.len == 1
 
     frameTasks[0]()                # execute next‑frame flush
-    require doc["hp"].getInt == 42
+    check doc["hp"].getInt == 42
 
 suite "ReactiveSeq permutations":
 
@@ -1851,9 +1851,9 @@ suite "ReactiveSeq permutations":
     rs.push "Y"                  # a X c d Y
     rs.pushFront "Z"            # Z a X c d Y
 
-    require sigB.val == "b"      # orphaned but still holds value
-    require sigD.val == "d"      # same instance (now deeper)
-    require rs.toPlain == @["Z","a","X","c","d","Y"]
+    check sigB.val == "b"      # orphaned but still holds value
+    check sigD.val == "d"      # same instance (now deeper)
+    check rs.toPlain == @["Z","a","X","c","d","Y"]
 
   test "All length‑3 permutations of two writes coalesce correctly":
     let C = newReactiveCtx()
@@ -1871,7 +1871,7 @@ suite "ReactiveSeq permutations":
       transaction(C):
         for pos in 0 .. 2:
           if ((i shr pos) and 1) == 0: ops[0]() else: ops[1]()
-      require sum.val == 3
+      check sum.val == 3
 
 suite "ReactiveTable key life‑cycle":
 
@@ -1880,30 +1880,30 @@ suite "ReactiveTable key life‑cycle":
     var rt = C.toReactive(initTable[string,int]())
     rt.put("hp", 10)
     let sigOld = rt["hp"]
-    require undoDepth(C) == 1      # ensure history push occurred
+    check undoDepth(C) == 1      # ensure history push occurred
 
     rt.delKey "hp"
     rt.put("hp", 99)              # new signal created & inserted
 
-    require rt["hp"].val == 99
-    require sigOld.val     == 10
+    check rt["hp"].val == 99
+    check sigOld.val     == 10
     sigOld.set 77
-    require rt["hp"].val == 99
-    require sigOld.val     == 77
+    check rt["hp"].val == 99
+    check sigOld.val     == 77
 
   test "Structural delete/undo/redo restores same signal instance":
     let C = newReactiveCtx()
     var rt = C.toReactive(initTable[int,int]())
     rt.put(1, 1)
     let sig1 = rt[1]
-    require undoDepth(C) == 1       # depth check
+    check undoDepth(C) == 1       # depth check
 
     rt.delKey 1
     undo C                          # bring key back
-    require rt[1] == sig1
+    check rt[1] == sig1
     redo C                          # delete again
     rt.put(1, 42)                   # re‑create
-    require rt[1] != sig1
+    check rt[1] != sig1
 
 suite "Memo – watch interaction":
 
@@ -1915,14 +1915,14 @@ suite "Memo – watch interaction":
     let parity = memo(C, () => raw.val mod 2)
 
     watch(C, selector = parity, handler = (n, o: int) => seen.add n, immediate=true)
-    require seen == @[1]
+    check seen == @[1]
 
     raw.set 3
     raw.set 6
     raw.set 8
     raw.set 9
 
-    require seen == @[1, 0, 1]
+    check seen == @[1, 0, 1]
 
   test "Effect reading watch selector inside memo chain not doubly counted":
     let C = newReactiveCtx()
@@ -1933,10 +1933,10 @@ suite "Memo – watch interaction":
     let triple = memo(C, () => dbl() * 3)
 
     effect(C, () => (discard triple(); outerHits.inc))
-    require outerHits == 1
+    check outerHits == 1
 
     base.set 4
-    require outerHits == 2
+    check outerHits == 2
 
 
 
@@ -1957,7 +1957,7 @@ suite "Reentrancy & flush‑during‑flush":
 
     a.set 1
     flushQueued C                  # should process both
-    require b.val == 1
+    check b.val == 1
 
 suite "Snapshot chain (length 5)":
 
@@ -1971,13 +1971,13 @@ suite "Snapshot chain (length 5)":
       chkpts.add snapshot(C)
 
     travel(C, chkpts[2])     # 30
-    require s == 30
+    check s == 30
     travel(C, chkpts[4])     # 50
-    require s == 50
+    check s == 50
     travel(C, chkpts[0])     # 10
-    require s == 10
+    check s == 10
     travel(C, chkpts[3])     # 40
-    require s == 40
+    check s == 40
 
 suite "Cascade depth chain":
 
@@ -1991,9 +1991,9 @@ suite "Cascade depth chain":
     var hits = 0
     effect(C, () => (discard mm(); hits.inc))
 
-    require hits == 1
+    check hits == 1
     base.set 5
-    require hits == 2
+    check hits == 2
 
 suite "Writable computed recursion guard":
 
@@ -2008,8 +2008,8 @@ suite "Writable computed recursion guard":
 
     twice.set 10            # src becomes 5
     chkpts.inc         # test completed
-    require (src.val, twice.val) == (5, 10)
-    require chkpts == 1
+    check (src.val, twice.val) == (5, 10)
+    check chkpts == 1
 
 suite "Reactive object wrapper (Complex)":
 
@@ -2035,10 +2035,10 @@ suite "Reactive object wrapper (Complex)":
       obj.pos.x += 3
 
     flushQueued C
-    require fires == 2
-    require obj.tags.toPlain == @["alpha", "beta"]
-    require obj.data["y"].val == 2
-    require obj.pos.x.val == 3
+    check fires == 2
+    check obj.tags.toPlain == @["alpha", "beta"]
+    check obj.data["y"].val == 2
+    check obj.pos.x.val == 3
 
   test "Undo chain traverses writable computed nested setter":
     let C = newReactiveCtx()
@@ -2053,9 +2053,9 @@ suite "Reactive object wrapper (Complex)":
       setter = (d: float) => (obj.pos.x.set d; obj.pos.y.set 0))
 
     dist.set 5
-    require (obj.pos.x.val, obj.pos.y.val) == (5.0, 0.0)
+    check (obj.pos.x.val, obj.pos.y.val) == (5.0, 0.0)
     undo C
-    require dist.val == 0.0
+    check dist.val == 0.0
 
 suite "Autosave toggling":
 
@@ -2067,14 +2067,14 @@ suite "Autosave toggling":
     enableAutosave(C, A)
     score.set 10
     flushQueued C
-    require A["score"].getInt == 10
+    check A["score"].getInt == 10
 
     disableAutosave C
     enableAutosave(C, B)
     score.set 22
     flushQueued C
-    require A["score"].getInt == 10
-    require B["score"].getInt == 22
+    check A["score"].getInt == 10
+    check B["score"].getInt == 22
 
   test "Autosave snapshot survives context disposal then further JSON edits":
     let C = newReactiveCtx()
@@ -2085,7 +2085,7 @@ suite "Autosave toggling":
     dispose C
 
     node["external"] = newJInt(99)
-    require node["hp"].getInt == 7
+    check node["hp"].getInt == 7
 
 suite "Large history stress (1000)":
 
@@ -2105,18 +2105,18 @@ suite "Large history stress (1000)":
       rs[i].set rs[i].val * 2
       rt[i]  = rt[i].val * 3
 
-    require undoDepth(C) == 1998   # 1000 structural + 998 value entries
+    check undoDepth(C) == 1998   # 1000 structural + 998 value entries
 
     undo(C, 1998)
     flushQueued C                      # ensure any queued len/structural updates apply
-    require rs.len == 0
-    require rt.len == 0
+    check rs.len == 0
+    check rt.len == 0
 
     redo(C, 1998)
     flushQueued C
-    require rs.len == 500
-    require rt.len == 500
-    require rs[123].val == 246 and rt[123].val == 369
+    check rs.len == 500
+    check rt.len == 500
+    check rs[123].val == 246 and rt[123].val == 369
 
 suite "Dispose mid‑frame flush":
 
@@ -2134,18 +2134,18 @@ suite "Dispose mid‑frame flush":
       if s.val == 1:
         dispose C)                 # dispose while reacting
 
-    require hits == 1              # initial mount
+    check hits == 1              # initial mount
 
     s.set 1                        # schedule reaction via frame scheduler
     frame[0]()                     # run flush – effect runs, disposes ctx
     frame.setLen 0                 # clear processed task
-    require hits == 2
+    check hits == 2
 
     s.set 2                        # write after dispose should **not** trigger effects
-    require s.val == 2             # value still mutates silently
-    require frame.len == 0         # scheduler is now no‑op
+    check s.val == 2             # value still mutates silently
+    check frame.len == 0         # scheduler is now no‑op
     flushQueued C                  # nothing to flush
-    require hits == 2              # no additional reactions
+    check hits == 2              # no additional reactions
 
 suite "watchNow with nested transaction":
 
@@ -2164,7 +2164,7 @@ suite "watchNow with nested transaction":
         hp -= 30
       hp += 5
 
-    require log == @[10, 7]  # first immediate, second after outer tx flush
+    check log == @[10, 7]  # first immediate, second after outer tx flush
 
 suite "std/algorithm interop":
 
@@ -2175,27 +2175,27 @@ suite "std/algorithm interop":
     effect(C, () => (discard rs.rev; revHits.inc))
 
     rs.sort()                          # 3 → 1 history entry
-    require rs.toPlain == @[1,2,3,4]
-    require undoDepth(C) == 1
-    require revHits == 2               # mount + after sort
+    check rs.toPlain == @[1,2,3,4]
+    check undoDepth(C) == 1
+    check revHits == 2               # mount + after sort
 
     rs.reverse()
-    require rs.toPlain == @[4,3,2,1]
-    require undoDepth(C) == 2
+    check rs.toPlain == @[4,3,2,1]
+    check undoDepth(C) == 2
 
     rs.rotateLeft(2)
-    require rs.toPlain == @[2,1,4,3]
-    require undoDepth(C) == 3
+    check rs.toPlain == @[2,1,4,3]
+    check undoDepth(C) == 3
 
     undo(C, 3)
-    require rs.toPlain == @[3,1,4,2]
+    check rs.toPlain == @[3,1,4,2]
 
   test "element signal survives reorder":
     let C = newReactiveCtx()
     var rs = C.toReactive(@["a","b","c"])
     let sigB = rs[1]                   # "b"
     rs.sort()
-    require sigB.val == "b"            # same instance, moved index
+    check sigB.val == "b"            # same instance, moved index
 
   test "binarySearch & isSorted stay reactive":
     let C = newReactiveCtx()
@@ -2203,14 +2203,14 @@ suite "std/algorithm interop":
     var idxLog: seq[int]
 
     effect(C, () => idxLog.add rs.binarySearch(3))
-    require idxLog == @[2]          # initial mount
+    check idxLog == @[2]          # initial mount
 
     rs.pushFront 2            # « instead of 0 »
-    require idxLog[^1] == 3   # 3 moved to index 3
+    check idxLog[^1] == 3   # 3 moved to index 3
 
-    require rs.isSorted == false
+    check rs.isSorted == false
     rs.sort()
-    require rs.isSorted == true
+    check rs.isSorted == true
 
 
   test "fill batches inside transaction":
@@ -2220,9 +2220,9 @@ suite "std/algorithm interop":
     effect(C, () => (discard rs[0].val; hits.inc))  # depend on element 0
 
     rs.fill(9)
-    require rs.toPlain == @[9,9,9,9]
-    require undoDepth(C) == 1          # single transaction entry
-    require hits == 2
+    check rs.toPlain == @[9,9,9,9]
+    check undoDepth(C) == 1          # single transaction entry
+    check hits == 2
 
   test "lowerBound / upperBound reactive":
     let C = newReactiveCtx()
@@ -2232,42 +2232,42 @@ suite "std/algorithm interop":
     effect(C, () => lbLog.add rs.lowerBound(4))
     effect(C, () => ubLog.add rs.upperBound(4))
 
-    require lbLog == @[3]      # first ≥ 4 is 5, at index 3
-    require ubLog == @[3]      # first > 4  is 5, at index 3
+    check lbLog == @[3]      # first ≥ 4 is 5, at index 3
+    check ubLog == @[3]      # first > 4  is 5, at index 3
 
     rs.insert(3, 4)            # keep sequence sorted
 
     # effect fired again → logs got a second entry
-    require lbLog == @[3, 3]   # 4 itself is now at 3, so lb index unchanged
-    require ubLog == @[3, 4]   # first > 4 moved one slot to the right
+    check lbLog == @[3, 3]   # 4 itself is now at 3, so lb index unchanged
+    check ubLog == @[3, 4]   # first > 4 moved one slot to the right
 
 
   test "nextPermutation pushes single history":
     let C = newReactiveCtx()
     var rs = C.toReactive(@[1,2,3])
     rs.nextPermutation()
-    require rs.toPlain == @[1,3,2]
-    require undoDepth(C) == 1
+    check rs.toPlain == @[1,3,2]
+    check undoDepth(C) == 1
     undo C
-    require rs.toPlain == @[1,2,3]
+    check rs.toPlain == @[1,2,3]
 
   test "slice rotateLeft mutates once":
     let C = newReactiveCtx()
     var rs = C.toReactive(@[0,1,2,3,4])
     rs.rotateLeft(1 .. 3, 2)   # [0,3,1,2,4]
-    require rs.toPlain == @[0,3,1,2,4]
-    require undoDepth(C) == 1
+    check rs.toPlain == @[0,3,1,2,4]
+    check undoDepth(C) == 1
 
   test "sorted snapshot unaffected by later edits":
     let C = newReactiveCtx()
     var rs = C.toReactive(@[3, 1, 2])
 
     let snap = rs.sorted()
-    require snap == @[1, 2, 3]     # copy is returned *already sorted*
+    check snap == @[1, 2, 3]     # copy is returned *already sorted*
 
     rs.sort()                      # mutate the reactive sequence
-    require rs.toPlain == @[1, 2, 3]
-    require snap == @[1, 2, 3]     # independent copy, unchanged
+    check rs.toPlain == @[1, 2, 3]
+    check snap == @[1, 2, 3]     # independent copy, unchanged
 
 suite "Advanced std/algorithm inter-op":
 
@@ -2278,11 +2278,11 @@ suite "Advanced std/algorithm inter-op":
     effect(C, () => (discard rs.rev; hits.inc))
 
     rs.nextPermutation()            # -> 1,3,2
-    require rs.toPlain == @[1,3,2]
-    require hits == 2               # mount + reorder
-    require undoDepth(C) == 1
+    check rs.toPlain == @[1,3,2]
+    check hits == 2               # mount + reorder
+    check undoDepth(C) == 1
     undo C
-    require rs.toPlain == @[1,2,3]
+    check rs.toPlain == @[1,2,3]
 
   test "prevPermutation then nextPermutation round-trips":
     let C = newReactiveCtx()
@@ -2303,11 +2303,11 @@ suite "Advanced std/algorithm inter-op":
     effect(C, () => (discard rs.rev; revHit.inc))
 
     rs.rotateLeft(2 .. 4, 1)        # rotate mini-window [2,3,4] -> 3,4,2
-    require rs.toPlain == @[0,1,3,4,2,5]
-    require revHit == 2
-    require undoDepth(C) == 1
+    check rs.toPlain == @[0,1,3,4,2,5]
+    check revHit == 2
+    check undoDepth(C) == 1
     undo C
-    require rs.toPlain == @[0,1,2,3,4,5]
+    check rs.toPlain == @[0,1,2,3,4,5]
 
   test "lower/upperBound react with custom descending cmp":
     let C = newReactiveCtx()
@@ -2316,18 +2316,18 @@ suite "Advanced std/algorithm inter-op":
     var lbLog: seq[int]
     effect(C, () => lbLog.add rs.lowerBound(6, desc))
 
-    require lbLog == @[2]           # 5 is first ≤ 6 in descending order
+    check lbLog == @[2]           # 5 is first ≤ 6 in descending order
 
     rs.insert(2, 6)                 # maintain descending sorting
-    require lbLog == @[2, 2]        # index of first ≤6 still 2 (new element)
+    check lbLog == @[2, 2]        # index of first ≤6 still 2 (new element)
 
   test "sorted(…, Descending) returns deep copy unaffected by further edits":
     let C = newReactiveCtx()
     var rs = C.toReactive(@[2,5,1])
     let snap = rs.sorted(Descending)   # @[5,2,1]
     rs.push 6
-    require snap == @[5,2,1]
-    require rs.toPlain == @[2,5,1,6]
+    check snap == @[5,2,1]
+    check rs.toPlain == @[2,5,1,6]
 
   test "multiple permutation calls inside transaction coalesce":
     let C = newReactiveCtx()
@@ -2336,7 +2336,7 @@ suite "Advanced std/algorithm inter-op":
       rs.nextPermutation()
       rs.nextPermutation()
       rs.prevPermutation()
-    require undoDepth(C) == 1         # one structural entry
+    check undoDepth(C) == 1         # one structural entry
 
   test "memo over lowerBound output updates once per structural change":
     let C = newReactiveCtx()
@@ -2345,13 +2345,13 @@ suite "Advanced std/algorithm inter-op":
     var fires = 0
 
     watchNow(C, lbMemo, (n, o: int) => fires.inc)
-    require fires == 1                  # immediate fire (index = 2)
+    check fires == 1                  # immediate fire (index = 2)
 
     rs.insert(1, 1)                     # 0,1,2,4,6  →  index becomes 3
-    require fires == 2                  # handler ran once
+    check fires == 2                  # handler ran once
 
     rs.insert( rs.upperBound(5), 5 )    # 0,1,2,4,5,6 → index still 3
-    require fires == 2                  # no extra fire
+    check fires == 2                  # no extra fire
 
   test "isSorted tracking survives unsort → sort toggle":
     let C = newReactiveCtx()
@@ -2361,4 +2361,86 @@ suite "Advanced std/algorithm inter-op":
 
     rs.insert(0, 4)                   # 4,1,2,3 -> unsorted
     rs.sort()                         # back to sorted
-    require log == @[true,false,true]
+    check log == @[true,false,true]
+
+
+suite "ReactiveSeq == std/algorithm consistency":
+
+  template mkPair(body: untyped): untyped =
+    let C = newReactiveCtx()
+    var plain {.inject.}: seq[int] = body
+    var rs    {.inject.} = C.toReactive(plain)
+
+  test "sort parity (asc/desc/custom)":
+    mkPair(@[5, 1, 4, 2, 3])
+
+    plain.sort()
+    rs.sort()
+    check rs.toPlain == plain
+
+    plain.sort(Descending)
+    rs.sort(order = Descending)
+    check rs.toPlain == plain
+
+    proc oddEven(a,b:int):int =
+      let ra = (a and 1); let rb = (b and 1)
+      if ra != rb: return cmp(ra, rb)
+      cmp(a, b)
+    plain.sort(oddEven)
+    rs.sort(oddEven)
+    check rs.toPlain == plain
+
+  test "reverse parity":
+    mkPair(@[0,1,2,3,4,5])
+
+    plain.reverse()
+    rs.reverse()
+    check rs.toPlain == plain
+
+    plain.reverse(1,4)
+    rs.reverse(1,4)
+    check rs.toPlain == plain
+
+  test "rotateLeft parity":
+    mkPair(@[0,1,2,3,4])
+
+    discard plain.rotateLeft(2)
+    discard rs.rotateLeft(2)
+    check rs.toPlain == plain
+
+    discard plain.rotateLeft(1..3, 1)
+    discard rs.rotateLeft(1..3, 1)
+    check rs.toPlain == plain
+
+  test "next/prevPermutation parity":
+    mkPair(@[1,2,3])
+
+    check plain.nextPermutation() == rs.nextPermutation()
+    check rs.toPlain == plain
+
+    check plain.prevPermutation() == rs.prevPermutation()
+    check rs.toPlain == plain
+
+  test "lower/upperBound parity after structural change":
+    mkPair(@[1,3,5,7])
+
+    check plain.lowerBound(4) == rs.lowerBound(4)
+
+    plain.insert(3, 4)
+    rs.insert(3, 4)
+
+    check plain.lowerBound(4) == rs.lowerBound(4)
+    check plain.upperBound(4) == rs.upperBound(4)
+
+  test "isSorted parity through unsort → sort":
+    mkPair(@[1,2,3])
+
+    check rs.isSorted == plain.isSorted
+
+    plain.insert(4, 0)
+    rs.insert(0, 4)
+    check rs.isSorted == plain.isSorted
+
+    plain.sort()
+    rs.sort()
+    check rs.isSorted == plain.isSorted
