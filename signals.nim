@@ -84,7 +84,8 @@ import std/[
   sequtils,
   macros,
   algorithm,
-  bitops
+  bitops,
+  complex
 ]
 
 type
@@ -2257,6 +2258,24 @@ proc `==`*[T](a: seq[T], b: seq[Signal[T]]): bool =
 template makeComputed(s: Signal, e: untyped): untyped =
   s.ctx.computed(() => e)
 
+template map1(s: Signal; f: untyped): untyped =
+  ## Apply a unary function `f` to the current value of signal `s`
+  ## and expose the result as a *new* computed signal.
+  ##
+  ## Usage:
+  ##     let b = a.map1(x => x + 1)
+  ##     #     ^ b is Signal[T] produced by f(a.val)
+  makeComputed(s, (f)(s.val))
+
+template map2(fn, a, b: untyped): untyped =
+  ## Reactive view for any pure binary function.
+  ## If both `a` and `b` are signals we track `a` (arbitrary choice) and
+  ## read `b.val`; if `b` is a scalar the generated code still works.
+  when compiles(b.val):
+    makeComputed(a, fn(a.val, b.val))
+  else:
+    makeComputed(a, fn(a.val, b))
+
 proc `not`*[T: SomeInteger](a: Signal[T]): Signal[T] =
   makeComputed(a, not a.val)
 
@@ -2383,3 +2402,175 @@ proc bitslice*[T: SomeInteger](s: Signal[T]; slice: Slice[int]) =
     for i in countdown(width - 1, 0):              # high → low
       res = (res shl 1) or ((v shr (slice.a + i)) and 1.T)
     v = res)
+
+# std/complex
+
+template withVarCpx(T, body: untyped) =
+  ## Shorthand for the big, repetitive “var Complex[T]” parameter list.
+  mutateSignal(s, proc (v {.inject.}: var complex.Complex[T]) = body)
+
+proc `+=`*[T](s: Signal[complex.Complex[T]], rhs: complex.Complex[T]) =
+  withVarCpx(T): v += rhs
+
+proc `-=`*[T](s: Signal[complex.Complex[T]], rhs: complex.Complex[T]) =
+  withVarCpx(T): v -= rhs
+
+proc `*=`*[T](s: Signal[complex.Complex[T]], rhs: complex.Complex[T]) =
+  withVarCpx(T): v *= rhs
+
+proc `/=`*[T](s: Signal[complex.Complex[T]], rhs: complex.Complex[T]) =
+  withVarCpx(T): v /= rhs
+
+proc `+`*[T](
+  a, b: Signal[complex.Complex[T]]
+): Signal[complex.Complex[T]] =
+  makeComputed(a, a.val + b.val)
+
+proc `+`*[T](
+  a: Signal[complex.Complex[T]], b: complex.Complex[T]
+): Signal[complex.Complex[T]] =
+  makeComputed(a, a.val + b)
+
+proc `+`*[T](
+  a: complex.Complex[T], b: Signal[complex.Complex[T]]
+): Signal[complex.Complex[T]] =
+  makeComputed(b, a + b.val)
+
+proc `-`*[T](
+  a, b: Signal[complex.Complex[T]]
+): Signal[complex.Complex[T]] =
+  makeComputed(a, a.val - b.val)
+
+proc `-`*[T](
+  a: Signal[complex.Complex[T]], b: complex.Complex[T]
+): Signal[complex.Complex[T]] =
+  makeComputed(a, a.val - b)
+
+proc `-`*[T](
+  a: complex.Complex[T], b: Signal[complex.Complex[T]]
+): Signal[complex.Complex[T]] =
+  makeComputed(b, a - b.val)
+
+proc `*`*[T](
+  a, b: Signal[complex.Complex[T]]
+): Signal[complex.Complex[T]] =
+  makeComputed(a, a.val * b.val)
+
+proc `*`*[T](
+  a: Signal[complex.Complex[T]], b: complex.Complex[T]
+): Signal[complex.Complex[T]] =
+  makeComputed(a, a.val * b)
+
+proc `*`*[T](
+  a: complex.Complex[T], b: Signal[complex.Complex[T]]
+): Signal[complex.Complex[T]] =
+  makeComputed(b, a * b.val)
+
+proc `/`*[T](
+  a, b: Signal[complex.Complex[T]]
+): Signal[complex.Complex[T]] =
+  makeComputed(a, a.val / b.val)
+
+proc `/`*[T](
+  a: Signal[complex.Complex[T]], b: complex.Complex[T]
+): Signal[complex.Complex[T]] =
+  makeComputed(a, a.val / b)
+
+proc `/`*[T](
+  a: complex.Complex[T], b: Signal[complex.Complex[T]]
+): Signal[complex.Complex[T]] =
+  makeComputed(b, a / b.val)
+
+proc `-`*[T](s: Signal[complex.Complex[T]]): Signal[complex.Complex[T]] =
+  ## Unary minus
+  makeComputed(s, -s.val)
+
+template defUnaryComplex*(fname: untyped) =
+  proc fname*[T](
+    s: Signal[complex.Complex[T]]
+  ): Signal[complex.Complex[T]] {.inline.} =
+    makeComputed(s, fname[T](s.val))
+
+defUnaryComplex(conjugate)
+defUnaryComplex(inv)
+defUnaryComplex(sgn)
+defUnaryComplex(sqrt)
+defUnaryComplex(exp)
+defUnaryComplex(ln)
+defUnaryComplex(log10)
+defUnaryComplex(log2)
+defUnaryComplex(sin)
+defUnaryComplex(arcsin)
+defUnaryComplex(cos)
+defUnaryComplex(arccos)
+defUnaryComplex(tan)
+defUnaryComplex(arctan)
+defUnaryComplex(cot)
+defUnaryComplex(arccot)
+defUnaryComplex(sec)
+defUnaryComplex(arcsec)
+defUnaryComplex(csc)
+defUnaryComplex(arccsc)
+defUnaryComplex(sinh)
+defUnaryComplex(arcsinh)
+defUnaryComplex(cosh)
+defUnaryComplex(arccosh)
+defUnaryComplex(tanh)
+defUnaryComplex(arctanh)
+defUnaryComplex(coth)
+defUnaryComplex(arccoth)
+defUnaryComplex(sech)
+defUnaryComplex(arcsech)
+defUnaryComplex(csch)
+defUnaryComplex(arccsch)
+
+proc abs*[T](s: Signal[complex.Complex[T]]): Signal[T] =
+  ## | `result = abs(s.val)`  (reactive)
+  makeComputed(s, complex.abs(s.val))
+
+proc abs2*[T](s: Signal[complex.Complex[T]]): Signal[T] =
+  ## | `result = abs2(s.val)` (squared magnitude)
+  makeComputed(s, complex.abs2(s.val))
+
+proc phase*[T](s: Signal[complex.Complex[T]]): Signal[T] =
+  ## | `result = phase(s.val)` (argument / angle)
+  makeComputed(s, complex.phase(s.val))
+
+proc rect*[T](r, phi: Signal[T]): Signal[complex.Complex[T]] =
+  ## reactive polar-to-rect; recomputes when **either** r or phi changes
+  makeComputed(r, complex.rect(r.val, phi.val))
+
+proc almostEqual*[T](
+  a, b: Signal[complex.Complex[T]],
+  ulp: Natural = 4
+): Signal[bool] =
+  makeComputed(a, complex.almostEqual(a.val, b.val, ulp))
+
+proc radius*[T](z: Signal[complex.Complex[T]]): Signal[T] =
+  ## | always equals `abs(z.val)` (== z.val.polar.r)
+  let pol = map1(complex.polar, z)     # Signal[tuple[r,phi]]
+  makeComputed(pol, pol.val.r)         # 1st param _is_ the Signal!
+
+proc polar*[T](
+  z: Signal[complex.Complex[T]]
+): Signal[tuple[r, phi: T]] =
+  ## Reactive polar-coordinates view of a complex signal.
+  ## Always equals `z.val.polar` and re-computes when `z` changes.
+  makeComputed(z, z.val.polar)
+
+template makeBinPow(body: untyped): untyped =
+  makeComputed(s, body)
+
+proc pow*[T](
+  s: Signal[complex.Complex[T]],
+  y: complex.Complex[T]
+): Signal[complex.Complex[T]] {.inline.} =
+  ## Reactive:   rs.pow(otherComplex)
+  makeComputed(s, complex.pow[T](s.val, y))
+
+proc pow*[T](
+  s: Signal[complex.Complex[T]],
+  y: T
+): Signal[complex.Complex[T]] {.inline.} =
+  ## Reactive:   rs.pow(realExponent)
+  makeComputed(s, complex.pow[T](s.val, y))

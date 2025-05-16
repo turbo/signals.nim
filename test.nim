@@ -2646,3 +2646,144 @@ suite "Reactive vs std/bitops parity":
         var (r, plain) = mkPair(uint8 0b1011_0100)
         r.bitslice(a..b);   plain.bitslice(a..b)
         check r.val == plain
+
+
+suite "Signal-based complex helpers":
+  let C     = newReactiveCtx()
+  var s1    = C.signal(complex.complex64(1, 2))
+  let other = complex.complex64(3, -4)
+
+  test "in-place +=":
+    var s1 = C.signal complex.complex64(1, 2)
+    s1 += other
+    # (1 + 2i) + (3 – 4i)  ==>  4 – 2i
+    check almostEqual(s1.val, complex.complex64(4, -2))
+
+  test "computed addition":
+    var s2  = C.signal complex.complex64(1, 2)
+    let sum = s2 + other        # initial: 4 – 2i
+    check almostEqual(sum.val, complex.complex64(4, -2))
+
+    s2 += other                 # s2 becomes 4 – 2i
+    # sum should now be (4 – 2i) + (3 – 4i) = 7 – 6i
+    check almostEqual(sum.val, complex.complex64(7, -6))
+
+  test "abs / phase reactive":
+    let z   = C.signal(complex.complex64(3, 4))   # |z| = 5
+    let az  = z.abs
+    check abs(az.val - 5.0) < 1e-6
+    z += complex.complex64(0, 1)                  # now 3+5i  -> |.| ≈ 5.830951
+    check abs(az.val - 5.830951) < 1e-4
+
+suite "Reactive vs std/complex parity":
+  const z0 = complex.complex64(3, -4)   # |z0| = 5
+  const w0 = complex.complex64(-2, 1.5) # a second operand
+
+  proc newPair[T](x: complex.Complex[T]): (
+    Signal[complex.Complex[T]],
+    complex.Complex[T]
+  ) =
+    let C = newReactiveCtx()
+    (C.signal(x), x)
+
+  template checkSame(op: untyped; a, b: untyped) =
+    check almostEqual(op(a), op(b))
+
+  test "+, -, *, /":
+    var (rs, p) = newPair(complex64(1, 2))
+    let q       = complex64(3, -4)
+    rs += q
+    p  += q
+    check rs.val.almostEqual(p)
+
+  test "sqrt / exp / ln":
+    let (rs, p) = newPair(complex64(0.3, 1.2))
+    checkSame(sqrt, rs.val, p)
+    checkSame(exp,  rs.val, p)
+    checkSame(ln,   rs.val, p)
+
+  test "polar / rect round-trip":
+    let (rs, _) = newPair(complex64(2, -2))
+    let pol = rs.polar()
+    let back = rect(
+      pol.map1((p: typeof pol.val) => p.r),      # radius    λ
+      pol.map1((p: typeof pol.val) => p.phi)     # phase     λ
+    )
+    check back.val.almostEqual(rs.val)
+
+  test "sin reactive dependency":
+    let C  = newReactiveCtx()
+    var z  = C.signal complex64(1, 1)
+    let s  = z.sin
+    var log: seq[Complex64]
+    C.effect proc () = log.add s.val
+    z += complex64(1, 0)
+    check log.len == 2          # fired again
+    check log[1].almostEqual(sin(z.val))
+
+  test "abs / abs2 / phase":
+    let (rs, p) = newPair(z0)
+    check rs.abs.val  == abs(p)
+    check rs.abs2.val == abs2(p)
+    check rs.phase.val.almostEqual phase(p)
+
+  test "conjugate / inverse":
+    let (rs, p) = newPair(z0)
+    check rs.conjugate.val == conjugate(p)
+    check rs.inv.val.almostEqual inv(p)
+
+  test "sqrt / exp / ln":
+    let (rs, p) = newPair(z0)
+    check rs.sqrt.val.almostEqual sqrt(p)
+    check rs.exp.val.almostEqual  exp(p)
+    check rs.ln.val.almostEqual   ln(p)
+
+  test "trigonometric functions":
+    let (rs, p) = newPair(z0)
+    check rs.sin.val.almostEqual  sin(p)
+    check rs.cos.val.almostEqual  cos(p)
+    check rs.tan.val.almostEqual  tan(p)
+
+  test "hyperbolic functions":
+    let (rs, p) = newPair(z0)
+    check rs.sinh.val.almostEqual sinh(p)
+    check rs.cosh.val.almostEqual cosh(p)
+    check rs.tanh.val.almostEqual tanh(p)
+
+  test "polar / rect round-trip (again)":
+    let (rs, _) = newPair(w0)
+    let pol  = rs.polar()                # Signal[(r,phi)]
+    let back = rect(
+      pol.map1((x: typeof pol.val) => x.r),
+      pol.map1((p: typeof pol.val) => p.phi)
+    )
+    check back.val.almostEqual(rs.val)
+
+  test "binary ops & pow":
+    var (rs, p) = newPair(z0)
+
+    # +  –  *  /
+    check (rs + w0).val.almostEqual(p + w0)
+    check (rs - w0).val.almostEqual(p - w0)
+    check (rs * w0).val.almostEqual(p * w0)
+    check (rs / w0).val.almostEqual(p / w0)
+
+    # pow with complex and real exponents
+    let cExp  = complex.complex64(0.3, 2)
+    check (rs.pow cExp).val.almostEqual pow(p, cExp)
+    check (rs.pow 2'f64).val.almostEqual pow(p, 2'f64)
+
+  test "in-place mutators (+=, -=, *=, /=)":
+    var (rs, p) = newPair(w0)
+
+    rs += z0;  p += z0
+    check rs.val.almostEqual p
+
+    rs -= z0;  p -= z0
+    check rs.val.almostEqual p
+
+    rs *= z0;  p *= z0
+    check rs.val.almostEqual p
+
+    rs /= z0;  p /= z0
+    check rs.val.almostEqual p
