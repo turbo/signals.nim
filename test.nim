@@ -2165,3 +2165,200 @@ suite "watchNow with nested transaction":
       hp += 5
 
     require log == @[10, 7]  # first immediate, second after outer tx flush
+
+suite "std/algorithm interop":
+
+  test "sort, reverse, rotateLeft push one structural history entry":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[3, 1, 4, 2])
+    var revHits = 0
+    effect(C, () => (discard rs.rev; revHits.inc))
+
+    rs.sort()                          # 3 → 1 history entry
+    require rs.toPlain == @[1,2,3,4]
+    require undoDepth(C) == 1
+    require revHits == 2               # mount + after sort
+
+    rs.reverse()
+    require rs.toPlain == @[4,3,2,1]
+    require undoDepth(C) == 2
+
+    rs.rotateLeft(2)
+    require rs.toPlain == @[2,1,4,3]
+    require undoDepth(C) == 3
+
+    undo(C, 3)
+    require rs.toPlain == @[3,1,4,2]
+
+  test "element signal survives reorder":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@["a","b","c"])
+    let sigB = rs[1]                   # "b"
+    rs.sort()
+    require sigB.val == "b"            # same instance, moved index
+
+  test "binarySearch & isSorted stay reactive":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[1, 2, 3])
+    var idxLog: seq[int]
+
+    effect(C, () => idxLog.add rs.binarySearch(3))
+    require idxLog == @[2]          # initial mount
+
+    rs.pushFront 2            # « instead of 0 »
+    require idxLog[^1] == 3   # 3 moved to index 3
+
+    require rs.isSorted == false
+    rs.sort()
+    require rs.isSorted == true
+
+
+  test "fill batches inside transaction":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[0,0,0,0])
+    var hits = 0
+    effect(C, () => (discard rs[0].val; hits.inc))  # depend on element 0
+
+    rs.fill(9)
+    require rs.toPlain == @[9,9,9,9]
+    require undoDepth(C) == 1          # single transaction entry
+    require hits == 2
+
+  test "lowerBound / upperBound reactive":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[1, 2, 3, 5, 7])   # already sorted
+    var lbLog, ubLog: seq[int]
+
+    effect(C, () => lbLog.add rs.lowerBound(4))
+    effect(C, () => ubLog.add rs.upperBound(4))
+
+    require lbLog == @[3]      # first ≥ 4 is 5, at index 3
+    require ubLog == @[3]      # first > 4  is 5, at index 3
+
+    rs.insert(3, 4)            # keep sequence sorted
+
+    # effect fired again → logs got a second entry
+    require lbLog == @[3, 3]   # 4 itself is now at 3, so lb index unchanged
+    require ubLog == @[3, 4]   # first > 4 moved one slot to the right
+
+
+  test "nextPermutation pushes single history":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[1,2,3])
+    rs.nextPermutation()
+    require rs.toPlain == @[1,3,2]
+    require undoDepth(C) == 1
+    undo C
+    require rs.toPlain == @[1,2,3]
+
+  test "slice rotateLeft mutates once":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[0,1,2,3,4])
+    rs.rotateLeft(1 .. 3, 2)   # [0,3,1,2,4]
+    require rs.toPlain == @[0,3,1,2,4]
+    require undoDepth(C) == 1
+
+  test "sorted snapshot unaffected by later edits":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[3, 1, 2])
+
+    let snap = rs.sorted()
+    require snap == @[1, 2, 3]     # copy is returned *already sorted*
+
+    rs.sort()                      # mutate the reactive sequence
+    require rs.toPlain == @[1, 2, 3]
+    require snap == @[1, 2, 3]     # independent copy, unchanged
+
+suite "Advanced std/algorithm inter-op":
+
+  test "nextPermutation fires exactly one effect and pushes one history":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[1,2,3])
+    var hits = 0
+    effect(C, () => (discard rs.rev; hits.inc))
+
+    rs.nextPermutation()            # -> 1,3,2
+    require rs.toPlain == @[1,3,2]
+    require hits == 2               # mount + reorder
+    require undoDepth(C) == 1
+    undo C
+    require rs.toPlain == @[1,2,3]
+
+  test "prevPermutation then nextPermutation round-trips":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[0, 1, 2])     # already the first permutation
+
+    # prevPermutation should fail and keep the sequence unchanged:
+    check rs.prevPermutation() == false
+    check rs.toPlain == @[0, 1, 2]
+
+    # nextPermutation succeeds and advances once:
+    check rs.nextPermutation() == true
+    check rs.toPlain == @[0, 2, 1]
+
+  test "slice rotateLeft mutates structurally and tracks history":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[0,1,2,3,4,5])
+    var revHit = 0
+    effect(C, () => (discard rs.rev; revHit.inc))
+
+    rs.rotateLeft(2 .. 4, 1)        # rotate mini-window [2,3,4] -> 3,4,2
+    require rs.toPlain == @[0,1,3,4,2,5]
+    require revHit == 2
+    require undoDepth(C) == 1
+    undo C
+    require rs.toPlain == @[0,1,2,3,4,5]
+
+  test "lower/upperBound react with custom descending cmp":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[9,7,5,3,1])   # descending
+    proc desc(a,b:int):int = system.cmp(b,a)
+    var lbLog: seq[int]
+    effect(C, () => lbLog.add rs.lowerBound(6, desc))
+
+    require lbLog == @[2]           # 5 is first ≤ 6 in descending order
+
+    rs.insert(2, 6)                 # maintain descending sorting
+    require lbLog == @[2, 2]        # index of first ≤6 still 2 (new element)
+
+  test "sorted(…, Descending) returns deep copy unaffected by further edits":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[2,5,1])
+    let snap = rs.sorted(Descending)   # @[5,2,1]
+    rs.push 6
+    require snap == @[5,2,1]
+    require rs.toPlain == @[2,5,1,6]
+
+  test "multiple permutation calls inside transaction coalesce":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[1,2,3])
+    transaction(C):
+      rs.nextPermutation()
+      rs.nextPermutation()
+      rs.prevPermutation()
+    require undoDepth(C) == 1         # one structural entry
+
+  test "memo over lowerBound output updates once per structural change":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[0, 2, 4, 6])
+    let lbMemo = memo(C, () => rs.lowerBound(3))
+    var fires = 0
+
+    watchNow(C, lbMemo, (n, o: int) => fires.inc)
+    require fires == 1                  # immediate fire (index = 2)
+
+    rs.insert(1, 1)                     # 0,1,2,4,6  →  index becomes 3
+    require fires == 2                  # handler ran once
+
+    rs.insert( rs.upperBound(5), 5 )    # 0,1,2,4,5,6 → index still 3
+    require fires == 2                  # no extra fire
+
+  test "isSorted tracking survives unsort → sort toggle":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[1,2,3])
+    var log: seq[bool]
+    effect(C, () => log.add rs.isSorted())
+
+    rs.insert(0, 4)                   # 4,1,2,3 -> unsorted
+    rs.sort()                         # back to sorted
+    require log == @[true,false,true]
