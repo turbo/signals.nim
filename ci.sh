@@ -13,11 +13,11 @@ cat > ./docs/index.html <<'HTML'
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta http-equiv="refresh" content="0; url=/signals.html" />
+    <meta http-equiv="refresh" content="0; url=signals.html" />
     <title>Redirecting…</title>
   </head>
   <body>
-    <p>If you are not redirected automatically, follow this <a href="/signals.html">link</a>.</p>
+    <p>If you are not redirected automatically, follow this <a href="signals.html">link</a>.</p>
   </body>
 </html>
 HTML
