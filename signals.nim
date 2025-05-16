@@ -83,7 +83,8 @@ import std/[
   json,
   sequtils,
   macros,
-  algorithm
+  algorithm,
+  bitops
 ]
 
 type
@@ -2250,3 +2251,56 @@ proc `==`*[T](a: seq[Signal[T]], b: seq[T]): bool =
 
 proc `==`*[T](a: seq[T], b: seq[Signal[T]]): bool =
   b == a  # symmetric
+
+# std/bitops
+
+template makeComputed(s: Signal; e: untyped): untyped =
+  s.ctx.computed(() => e)
+
+proc `not`*[T: SomeInteger](a: Signal[T]): Signal[T] =
+  makeComputed(a, not a.val)
+
+proc `and`*[T: SomeInteger](a, b: Signal[T]): Signal[T] =
+  makeComputed(a, a.val and b.val)
+proc `and`*[T: SomeInteger](a: Signal[T], b: T): Signal[T] =
+  makeComputed(a, a.val and b)
+proc `and`*[T: SomeInteger](a: T, b: Signal[T]): Signal[T] =
+  makeComputed(b, a and b.val)
+
+proc `or` *[T: SomeInteger](a, b: Signal[T]): Signal[T] =
+  makeComputed(a, a.val or b.val)
+proc `or` *[T: SomeInteger](a: Signal[T], b: T): Signal[T] =
+  makeComputed(a, a.val or b)
+proc `or` *[T: SomeInteger](a: T, b: Signal[T]): Signal[T] =
+  makeComputed(b, a or b.val)
+
+proc `xor`*[T: SomeInteger](a, b: Signal[T]): Signal[T] =
+  makeComputed(a, a.val xor b.val)
+proc `xor`*[T: SomeInteger](a: Signal[T], b: T): Signal[T] =
+  makeComputed(a, a.val xor b)
+proc `xor`*[T: SomeInteger](a: T, b: Signal[T]): Signal[T] =
+  makeComputed(b, a xor b.val)
+
+proc rotateLeftBits*[T: SomeUnsignedInt](
+  s: Signal[T]; k: range[0 .. sizeof(T) * 8]): Signal[T] =
+  makeComputed(s, rotateLeftBits(s.val, k))
+
+proc rotateRightBits*[T: SomeUnsignedInt](
+  s: Signal[T]; k: range[0 .. sizeof(T) * 8]): Signal[T] =
+  makeComputed(s, rotateRightBits(s.val, k))
+
+proc testBit*[T: SomeInteger](
+  s: Signal[T]; bit: BitsRange[T]): Signal[bool] =
+  makeComputed(s, testBit(s.val, bit))
+
+proc flipBit*[T: SomeInteger](s: Signal[T]; bit: BitsRange[T]) =
+  ## Mutates the *contained* value exactly as std/bitops.flipBit would.
+  s.set:
+    var tmp = s.val
+    tmp.flipBit bit
+    tmp # returned -> new value
+
+proc flippedBit*[T: SomeInteger](
+  s: Signal[T]; bit: BitsRange[T]): Signal[T] =
+  ## Reactive wrapper: always equals `s.val` with `bit` toggled.
+  makeComputed(s, (var tmp = s.val; tmp.flipBit bit; tmp))

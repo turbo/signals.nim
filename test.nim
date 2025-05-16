@@ -2444,3 +2444,55 @@ suite "ReactiveSeq == std/algorithm consistency":
     plain.sort()
     rs.sort()
     check rs.isSorted == plain.isSorted
+
+suite "bitops / signal integration":
+
+  test "binary bit-and reactivity":
+    let C = newReactiveCtx()
+    var a = C.signal 0b1100'u8
+    var b = C.signal 0b1010'u8
+    let c = a and b                 # 0b1000
+    var hits = 0
+    C.effect proc = (discard c.val; inc hits)
+
+    check c.val == 0b1000'u8
+    a.set 0b0110                    # now 0b0010
+    check c.val == 0b0010'u8
+    check hits == 2                 # re-ran exactly once
+
+  test "and/or/xor with scalar rhs":
+    let C = newReactiveCtx()
+    var x = C.signal 0b0101'u8
+    let m = x and 0b0011'u8
+    let n = x or  0b1000'u8
+    let p = x xor 0b1111'u8
+    check (m.val, n.val, p.val) == (0b0001'u8, 0b1101'u8, 0b1010'u8)
+    x.set 0b1111'u8
+    check (m.val, n.val, p.val) == (0b0011'u8, 0b1111'u8, 0b0000'u8)
+
+  test "unary not":
+    let C = newReactiveCtx()
+    var f = C.signal uint8 0b0000_1111
+    let g = not f
+    check g.val == 0b1111_0000'u8
+    f.set 0b0101_0101
+    check g.val == 0b1010_1010'u8
+
+  test "rotateLeft / rotateRight wrappers":
+    let C = newReactiveCtx()
+    var v = C.signal uint8 0b0110_1001
+    let l = rotateLeftBits(v, 4)
+    let r = rotateRightBits(v, 4)
+    check (l.val, r.val) == (0b1001_0110'u8, 0b1001_0110'u8)
+    v.set 0b0011_1100
+    check (l.val, r.val) == (0b1100_0011'u8, 0b1100_0011'u8)
+
+  test "testBit over signal":
+    let C = newReactiveCtx()
+    var flags = C.signal uint8 0b0001_0000
+    let bit4  = flags.testBit(4'u8)
+    var log: seq[bool]
+    C.effect proc = (log.add bit4.val)
+    check log == @[true]
+    flags.flipBit 4'u8
+    check log[^1] == false
