@@ -625,7 +625,12 @@ type
     floatVal*: Signal[float]
     boolVal* : Signal[bool]
 
-proc markDirty(ctx: ReactiveCtx)
+proc markDirty(ctx: ReactiveCtx);
+proc mutate[T](rs: ReactiveSeq[T], op: proc (s: var seq[Signal[T]]));
+proc mutate[K, V](
+  rt: ReactiveTable[K, V],
+  op: proc (t: var Table[K, Signal[V]])
+);
 
 proc newReactiveCtx*(): ReactiveCtx =
   ## Constructs and returns a fresh `ReactiveCtx` with the default immediate
@@ -909,6 +914,10 @@ proc notifySubs[T](s: Signal[T]) =
       c.queueHashes.incl h
       c.queue.add cb
 
+template bumpRev[T](rs: ReactiveSeq[T]) =
+  let s = rs.revS
+  s.value.inc            # always increments, no equality check needed
+  notifySubs s
 
 proc newReactiveNull*(ctx: ReactiveCtx): JsonNodeReactive
 
@@ -1023,6 +1032,8 @@ proc `==`*[T](a: Signal[T], b: T): bool =
 
 proc `==`*[T](a: T, b: Signal[T]): bool =
   (not b.isNil) and a == b.value
+
+
 
 
 proc computed*[T](
@@ -2032,11 +2043,16 @@ macro reactive*(T: typedesc): untyped =
 
   # Parse and validate the source object.
   let impl = T.getImpl()
+  let srcNameNode = impl[0] # name
   var obj  = impl[^1]
+  let isExported  = srcNameNode.kind == nnkPostfix
+
   if obj.kind == nnkRefTy:
     obj = obj[0]
+
   if obj.kind != nnkObjectTy:
     error "reactive(): expects value object", T
+
   rlog "SOURCE OBJECT repr=" & $obj.repr
 
   # Build the field tree of the wrapper.
@@ -2117,9 +2133,19 @@ macro reactive*(T: typedesc): untyped =
 
   # Generate the wrapper type and helper procedures.
   let W = ident($T & "Reactive")
-  let wrapperObj = nnkObjectTy.newTree(newEmptyNode(), newEmptyNode(), dstRoot)
+  let wDefName   = if isExported:
+    nnkPostfix.newTree(ident"*", W)
+  else:
+    W
+
+  let wrapperObj = nnkObjectTy.newTree(
+    newEmptyNode(),
+    newEmptyNode(),
+    dstRoot
+  )
+
   let typeDef = nnkTypeDef.newTree(
-    W,
+    wDefName,
     newEmptyNode(),
     nnkRefTy.newTree(wrapperObj)
   )
@@ -2241,10 +2267,7 @@ template rev*(rs: ReactiveSeq): untyped =
   registerDep rs.revS
   rs.revS.value
 
-template bumpRev[T](rs: ReactiveSeq[T]) =
-  let s = rs.revS
-  s.value.inc            # always increments, no equality check needed
-  notifySubs s
+
 
 proc toReactive*[T](ctx: ReactiveCtx, src: seq[T]): ReactiveSeq[T] =
   ## Wraps an existing `seq[T]` in `ctx`, producing a `ReactiveSeq` where
