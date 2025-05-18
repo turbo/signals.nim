@@ -12,7 +12,7 @@
   type
     Vec2 = object
       x*, y*: float
-    
+
     SpeciesX* = enum spGoblinX, spOgreX, spDragonX
     ElementX* = enum elNoneX, elFireX, elIceX, elLightningX
 
@@ -21,7 +21,7 @@
 
     CoreStatsX* = object
       hp*, mp*: int = 100
-      pos*: Vec2 = Vec2(x: 0, y: 0)    
+      pos*: Vec2 = Vec2(x: 0, y: 0)
       resist*: ResistancesX
 
     MonsterX* = object
@@ -33,15 +33,15 @@
 
       case kind*: SpeciesX
       of spGoblinX:
-        speed*: float            
+        speed*: float
       of spOgreX:
-        clubDmg*: int              
+        clubDmg*: int
       of spDragonX:
-        element*: ElementX         
-        breath*: array[3, float]  
+        element*: ElementX
+        breath*: array[3, float]
 
   reactive(Vec2)
-  reactive(CoreStatsX)    
+  reactive(CoreStatsX)
   reactive(MonsterX)
   ```
 
@@ -68,7 +68,7 @@
   ```
 
   to hard:
-  
+
   ```nim
   suite "MonsterX wrapper":
 
@@ -79,7 +79,7 @@
 
     proc newGoblin(id = 1): MonsterX =
       MonsterX(id: id,
-              name: "Gob" & $id,          # ← fixed
+              name: "Gob" & $id,
               tags: @["evil"],
               inv: initTable[string,int](),
               stats: baseStats(),
@@ -88,7 +88,7 @@
 
     proc newDragon(id = 1): MonsterX =
       MonsterX(id: id,
-              name: "Drg" & $id,          # ← fixed
+              name: "Drg" & $id,
               tags: @["boss"],
               inv: initTable[string,int](),
               stats: baseStats(300),
@@ -169,7 +169,7 @@
       check m.kind == spDragonX
       check m.element == elFireX
       check hpHits == 3                  # mount + once after transition
-      
+
       let newTags = m.tags.toPlain()
       check newTags == @["boss"]
 
@@ -1717,7 +1717,7 @@ proc unwrapAlias(n: NimNode): NimNode =
   ## Walks a sequence of simple type‐aliases (that is, aliases whose right-hand
   ## side is either another symbol, a generic instantiation such as
   ## `array[3, float]`, or a tuple type) and returns the first node that is
-  ## *not* an alias.  
+  ## *not* an alias.
   ##
   ## A node that is already a concrete type, a non-symbol AST fragment, or an
   ## alias that we cannot safely inspect (for example because it comes from an
@@ -1861,7 +1861,7 @@ macro reactive*(T: typedesc): untyped =
   ## * **`toReactive(ctx, src)`** – builds the wrapper from a plain value.
   ## * **`toPlain(self)`** – converts the wrapper back to a plain value.
   ## * **`set(self, src)`** – overwrites the wrapper with a new plain (object)
-  ##   value while integrating with undo/redo, transactions, and variant 
+  ##   value while integrating with undo/redo, transactions, and variant
   ##   switching.
   ##
   ## ***Why you need it***
@@ -1940,18 +1940,18 @@ macro reactive*(T: typedesc): untyped =
   ): NimNode
 
   proc buildRecCase(
-    srcCase: NimNode; 
+    srcCase: NimNode;
     toRe, toPlain, setS: var NimNode
   ): NimNode
 
   proc buildRecList(
-    srcRL: NimNode; 
-    toRe, toPlain, setS: var NimNode; 
+    srcRL: NimNode;
+    toRe, toPlain, setS: var NimNode;
     names: var seq[NimNode]
   ): NimNode =
     result = nnkRecList.newTree()
     rlog "buildRecList len=" & $srcRL.len
-    
+
     for ch in srcRL.children:
       case ch.kind
       of nnkIdentDefs:
@@ -1973,17 +1973,17 @@ macro reactive*(T: typedesc): untyped =
         discard
 
   proc buildRecCase(
-    srcCase: NimNode; 
+    srcCase: NimNode;
     toRe, toPlain, setS: var NimNode
   ): NimNode =
     rlog "buildRecCase repr=" & $srcCase.repr
     let discDefs = srcCase[0]
-    
-    discName = if discDefs[0].kind == nnkPostfix: 
-      discDefs[0][1] 
-    else: 
+
+    discName = if discDefs[0].kind == nnkPostfix:
+      discDefs[0][1]
+    else:
       discDefs[0]
-    
+
     # Skeleton case statements for the helpers.
     var caseToRe  = nnkCaseStmt.newTree(quote do: `srcId`.`discName`)
     var casePlain = nnkCaseStmt.newTree(quote do: `selfId`.`discName`)

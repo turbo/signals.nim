@@ -59,39 +59,35 @@ reactive(Complex)
 
 # kitchen sink for reactive compiler macro
 
-# ── extra “kitchen-sink” types (Vec2 is re-used) ────────────────────────
 type
-  SpeciesX*  = enum spGoblinX, spOgreX, spDragonX
-  ElementX*  = enum elNoneX, elFireX, elIceX, elLightningX
+  SpeciesX* = enum spGoblinX, spOgreX, spDragonX
+  ElementX* = enum elNoneX, elFireX, elIceX, elLightningX
 
   ResistancesX* = Table[ElementX, float]
-  InventoryX*   = Table[string, int]
+  InventoryX* = Table[string, int]
 
   CoreStatsX* = object
-    hp*, mp*: int        = 100
-    pos*     : Vec2      = Vec2(x: 0, y: 0)     ## ← re-uses Vec2
-    resist*  : ResistancesX
+    hp*, mp*: int = 100
+    pos*: Vec2 = Vec2(x: 0, y: 0)
+    resist*: ResistancesX
 
   MonsterX* = object
-    ## shared part -------------------------------------------------------
-    id*   : int
-    name* : string          = "unnamed-X"
-    tags* : seq[string]     = @[]
-    inv*  : InventoryX
+    id*: int
+    name*: string = "unnamed-X"
+    tags*: seq[string] = @[]
+    inv*: InventoryX
     stats*: CoreStatsX
 
-    ## variant part ------------------------------------------------------
     case kind*: SpeciesX
     of spGoblinX:
-      speed*   : float            
+      speed*: float
     of spOgreX:
-      clubDmg* : int              
+      clubDmg*: int
     of spDragonX:
-      element* : ElementX         
-      breath*  : array[3, float]  
+      element*: ElementX
+      breath*: array[3, float]
 
-# ── reactive wrappers for the new types ────────────────────────────────
-reactive(CoreStatsX)      # Vec2 wrapper already exists
+reactive(CoreStatsX)
 reactive(MonsterX)
 
 
@@ -1237,7 +1233,6 @@ suite "Wrapper edge-cases":
 
 suite "MonsterX wrapper":
 
-  # handy helpers to avoid huge literals inside the tests
   proc baseStats(hp = 100, mp = 0): CoreStatsX =
     CoreStatsX(hp: hp, mp: mp,
                pos: Vec2(x: 0, y: 0),
@@ -1245,7 +1240,7 @@ suite "MonsterX wrapper":
 
   proc newGoblin(id = 1): MonsterX =
     MonsterX(id: id,
-            name: "Gob" & $id,          # ← fixed
+            name: "Gob" & $id,
             tags: @["evil"],
             inv: initTable[string,int](),
             stats: baseStats(),
@@ -1254,7 +1249,7 @@ suite "MonsterX wrapper":
 
   proc newDragon(id = 1): MonsterX =
     MonsterX(id: id,
-            name: "Drg" & $id,          # ← fixed
+            name: "Drg" & $id,
             tags: @["boss"],
             inv: initTable[string,int](),
             stats: baseStats(300),
@@ -1335,7 +1330,7 @@ suite "MonsterX wrapper":
     check m.kind == spDragonX
     check m.element == elFireX
     check hpHits == 3                  # mount + once after transition
-    
+
     let newTags = m.tags.toPlain()
     check newTags == @["boss"]
 
@@ -3057,7 +3052,7 @@ suite "Reactive JSON tree":
     C.effect proc =
       lens.add len(jr.fields)         # reactive length read
 
-    jr["a"].intVal.set 1 
+    jr["a"].intVal.set 1
     flushQueued C
     check lens == @[0, 1]
 
