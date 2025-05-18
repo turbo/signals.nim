@@ -6,6 +6,191 @@
   The key ideas and how they fit together are outlined below. Each concept
   links to the concrete API symbol that realises it.
 
+  Signals supports complex object hierarchies effortlessly:
+
+  ```nim
+  type
+    Vec2 = object
+      x*, y*: float
+    
+    SpeciesX* = enum spGoblinX, spOgreX, spDragonX
+    ElementX* = enum elNoneX, elFireX, elIceX, elLightningX
+
+    ResistancesX* = Table[ElementX, float]
+    InventoryX* = Table[string, int]
+
+    CoreStatsX* = object
+      hp*, mp*: int = 100
+      pos*: Vec2 = Vec2(x: 0, y: 0)    
+      resist*: ResistancesX
+
+    MonsterX* = object
+      id*: int
+      name*: string = "unnamed-X"
+      tags*: seq[string] = @[]
+      inv*: InventoryX
+      stats*: CoreStatsX
+
+      case kind*: SpeciesX
+      of spGoblinX:
+        speed*: float            
+      of spOgreX:
+        clubDmg*: int              
+      of spDragonX:
+        element*: ElementX         
+        breath*: array[3, float]  
+
+  reactive(Vec2)
+  reactive(CoreStatsX)    
+  reactive(MonsterX)
+  ```
+
+  And handles signal propagation from easy:
+
+  ```nim
+  let ctx = newReactiveCtx()
+
+  var hp    = ctx.signal 100
+  var maxHp = ctx.signal 150
+
+  let pct = ctx.computed () => hp.val / maxHp.val
+
+  ctx.effect proc =
+    echo "health bar width ", pct.val * 100, "%"
+
+  hp -= 10
+  hp.set 0
+
+  # output:
+  # health bar width 66.66666666666666%
+  # health bar width 60.0%
+  # health bar width 0.0%
+  ```
+
+  to hard:
+  
+  ```nim
+  suite "MonsterX wrapper":
+
+    proc baseStats(hp = 100, mp = 0): CoreStatsX =
+      CoreStatsX(hp: hp, mp: mp,
+                pos: Vec2(x: 0, y: 0),
+                resist: initTable[ElementX,float]())
+
+    proc newGoblin(id = 1): MonsterX =
+      MonsterX(id: id,
+              name: "Gob" & $id,          # ← fixed
+              tags: @["evil"],
+              inv: initTable[string,int](),
+              stats: baseStats(),
+              kind: spGoblinX,
+              speed: 2.0)
+
+    proc newDragon(id = 1): MonsterX =
+      MonsterX(id: id,
+              name: "Drg" & $id,          # ← fixed
+              tags: @["boss"],
+              inv: initTable[string,int](),
+              stats: baseStats(300),
+              kind: spDragonX,
+              element: elFireX,
+              breath: [0.3, 0.3, 0.4])
+
+    test "Shared primitive propagates":
+      let C = newReactiveCtx()
+      var m = C.toReactive(newGoblin())
+      var hits = 0
+      C.effect proc =
+        discard m.stats.hp.val
+        inc hits
+
+      m.stats.hp += 25
+      check m.stats.hp.val == 125
+      check hits == 2           # mount + after write
+
+    test "Table alias (ResistancesX) is reactive":
+      let C = newReactiveCtx()
+      var m = C.toReactive(newGoblin())
+      var log: seq[float]
+
+      C.effect proc =
+        discard m.stats.resist[elIceX].val
+        log.add m.stats.resist[elIceX].val
+
+      m.stats.resist[elIceX] = 0.5       # structural put → new signal
+      check log == @[0.0, 0.5]
+
+    test "Seq alias (tags) is reactive and undo-able":
+      let C = newReactiveCtx()
+      var m = C.toReactive(newGoblin())
+      m.tags.push "fast"
+      undo C
+      check m.tags.len == 1              # only original "evil"
+
+    test "Inventory (Table alias) structural edits":
+      let C = newReactiveCtx()
+      var m = C.toReactive(newGoblin())
+      var revs: seq[int]
+
+      C.effect proc =
+        discard rev(m.inv)               # structural rev counter
+        revs.add rev(m.inv)
+
+      m.inv.put("gold", 100)
+      m.inv.put("potion", 2)
+      check m.inv.len == 2
+      check revs.len == 3                # mount + 2 puts
+
+    test "Variant transition keeps shared deps":
+      let C = newReactiveCtx()
+      var m = C.toReactive(newGoblin())
+      var hpHits = 0
+      C.effect proc =
+        discard m.stats.hp.val           # shared across variants
+        inc hpHits
+
+      check m.stats.hp.val == 100
+
+      # transition Goblin → Dragon
+      let snapTags = m.tags.toPlain()
+      check snapTags == @["evil"]
+
+      let nd = newDragon()
+      check nd.stats.hp == 300
+
+      m.set nd
+
+      check m.stats.hp.val == 300
+
+      m.stats.hp -= 1
+
+      check m.stats.hp.val == 299
+
+      check m.kind == spDragonX
+      check m.element == elFireX
+      check hpHits == 3                  # mount + once after transition
+      
+      let newTags = m.tags.toPlain()
+      check newTags == @["boss"]
+
+    test "Undo across variant transition":
+      let C = newReactiveCtx()
+      var m = C.toReactive(newGoblin())
+      m.set newDragon()
+      undo C
+      check m.kind == spGoblinX
+      check m.speed.val == 2.0
+
+    test "toPlain snapshot after deep edits":
+      let C = newReactiveCtx()
+      var m = C.toReactive(newGoblin())
+      let snap = m.toPlain()
+      m.stats.pos.x.set 10
+      m.inv.put("dagger", 1)
+      check snap.stats.pos.x == 0        # untouched snapshot
+      check "dagger" notin snap.inv
+  ```
+
   ***Signals***
 
   * A `Signal`_ stores one value of type `T` and remembers every observer

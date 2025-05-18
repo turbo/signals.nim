@@ -775,6 +775,179 @@
     
     <p class="module-desc">
 <h1><a class="toc-backref" id="signals-minus-durable-reactive-effects-for-nim" href="#signals-minus-durable-reactive-effects-for-nim">Signals - Durable Reactive Effects for Nim</a></h1><p>This module implements <em>signals</em> and a lightweight runtime that keeps values, collections, and whole object graphs in sync automatically. The key ideas and how they fit together are outlined below. Each concept links to the concrete API symbol that realises it.</p>
+<p>Signals supports complex object hierarchies effortlessly:</p>
+<p><pre class="listing"><span class="Keyword">type</span>
+  <span class="Identifier">Vec2</span> <span class="Operator">=</span> <span class="Keyword">object</span>
+    <span class="Identifier">x</span><span class="Operator">*</span><span class="Punctuation">,</span> <span class="Identifier">y</span><span class="Operator">*:</span> <span class="Identifier">float</span>
+  
+  <span class="Identifier">SpeciesX</span><span class="Operator">*</span> <span class="Operator">=</span> <span class="Keyword">enum</span> <span class="Identifier">spGoblinX</span><span class="Punctuation">,</span> <span class="Identifier">spOgreX</span><span class="Punctuation">,</span> <span class="Identifier">spDragonX</span>
+  <span class="Identifier">ElementX</span><span class="Operator">*</span> <span class="Operator">=</span> <span class="Keyword">enum</span> <span class="Identifier">elNoneX</span><span class="Punctuation">,</span> <span class="Identifier">elFireX</span><span class="Punctuation">,</span> <span class="Identifier">elIceX</span><span class="Punctuation">,</span> <span class="Identifier">elLightningX</span>
+  
+  <span class="Identifier">ResistancesX</span><span class="Operator">*</span> <span class="Operator">=</span> <span class="Identifier">Table</span><span class="Punctuation">[</span><span class="Identifier">ElementX</span><span class="Punctuation">,</span> <span class="Identifier">float</span><span class="Punctuation">]</span>
+  <span class="Identifier">InventoryX</span><span class="Operator">*</span> <span class="Operator">=</span> <span class="Identifier">Table</span><span class="Punctuation">[</span><span class="Identifier">string</span><span class="Punctuation">,</span> <span class="Identifier">int</span><span class="Punctuation">]</span>
+  
+  <span class="Identifier">CoreStatsX</span><span class="Operator">*</span> <span class="Operator">=</span> <span class="Keyword">object</span>
+    <span class="Identifier">hp</span><span class="Operator">*</span><span class="Punctuation">,</span> <span class="Identifier">mp</span><span class="Operator">*:</span> <span class="Identifier">int</span> <span class="Operator">=</span> <span class="DecNumber">100</span>
+    <span class="Identifier">pos</span><span class="Operator">*:</span> <span class="Identifier">Vec2</span> <span class="Operator">=</span> <span class="Identifier">Vec2</span><span class="Punctuation">(</span><span class="Identifier">x</span><span class="Punctuation">:</span> <span class="DecNumber">0</span><span class="Punctuation">,</span> <span class="Identifier">y</span><span class="Punctuation">:</span> <span class="DecNumber">0</span><span class="Punctuation">)</span>
+    <span class="Identifier">resist</span><span class="Operator">*:</span> <span class="Identifier">ResistancesX</span>
+  
+  <span class="Identifier">MonsterX</span><span class="Operator">*</span> <span class="Operator">=</span> <span class="Keyword">object</span>
+    <span class="Identifier">id</span><span class="Operator">*:</span> <span class="Identifier">int</span>
+    <span class="Identifier">name</span><span class="Operator">*:</span> <span class="Identifier">string</span> <span class="Operator">=</span> <span class="StringLit">&quot;unnamed-X&quot;</span>
+    <span class="Identifier">tags</span><span class="Operator">*:</span> <span class="Identifier">seq</span><span class="Punctuation">[</span><span class="Identifier">string</span><span class="Punctuation">]</span> <span class="Operator">=</span> <span class="Operator">@</span><span class="Punctuation">[</span><span class="Punctuation">]</span>
+    <span class="Identifier">inv</span><span class="Operator">*:</span> <span class="Identifier">InventoryX</span>
+    <span class="Identifier">stats</span><span class="Operator">*:</span> <span class="Identifier">CoreStatsX</span>
+    
+    <span class="Keyword">case</span> <span class="Identifier">kind</span><span class="Operator">*:</span> <span class="Identifier">SpeciesX</span>
+    <span class="Keyword">of</span> <span class="Identifier">spGoblinX</span><span class="Punctuation">:</span>
+      <span class="Identifier">speed</span><span class="Operator">*:</span> <span class="Identifier">float</span>
+    <span class="Keyword">of</span> <span class="Identifier">spOgreX</span><span class="Punctuation">:</span>
+      <span class="Identifier">clubDmg</span><span class="Operator">*:</span> <span class="Identifier">int</span>
+    <span class="Keyword">of</span> <span class="Identifier">spDragonX</span><span class="Punctuation">:</span>
+      <span class="Identifier">element</span><span class="Operator">*:</span> <span class="Identifier">ElementX</span>
+      <span class="Identifier">breath</span><span class="Operator">*:</span> <span class="Identifier">array</span><span class="Punctuation">[</span><span class="DecNumber">3</span><span class="Punctuation">,</span> <span class="Identifier">float</span><span class="Punctuation">]</span>
+
+<span class="Identifier">reactive</span><span class="Punctuation">(</span><span class="Identifier">Vec2</span><span class="Punctuation">)</span>
+<span class="Identifier">reactive</span><span class="Punctuation">(</span><span class="Identifier">CoreStatsX</span><span class="Punctuation">)</span>
+<span class="Identifier">reactive</span><span class="Punctuation">(</span><span class="Identifier">MonsterX</span><span class="Punctuation">)</span></pre></p>
+<p>And handles signal propagation from easy:</p>
+<p><pre class="listing"><span class="Keyword">let</span> <span class="Identifier">ctx</span> <span class="Operator">=</span> <span class="Identifier">newReactiveCtx</span><span class="Punctuation">(</span><span class="Punctuation">)</span>
+
+<span class="Keyword">var</span> <span class="Identifier">hp</span>    <span class="Operator">=</span> <span class="Identifier">ctx</span><span class="Operator">.</span><span class="Identifier">signal</span> <span class="DecNumber">100</span>
+<span class="Keyword">var</span> <span class="Identifier">maxHp</span> <span class="Operator">=</span> <span class="Identifier">ctx</span><span class="Operator">.</span><span class="Identifier">signal</span> <span class="DecNumber">150</span>
+
+<span class="Keyword">let</span> <span class="Identifier">pct</span> <span class="Operator">=</span> <span class="Identifier">ctx</span><span class="Operator">.</span><span class="Identifier">computed</span> <span class="Punctuation">(</span><span class="Punctuation">)</span> <span class="Operator">=&gt;</span> <span class="Identifier">hp</span><span class="Operator">.</span><span class="Identifier">val</span> <span class="Operator">/</span> <span class="Identifier">maxHp</span><span class="Operator">.</span><span class="Identifier">val</span>
+
+<span class="Identifier">ctx</span><span class="Operator">.</span><span class="Identifier">effect</span> <span class="Keyword">proc</span> <span class="Operator">=</span>
+  <span class="Identifier">echo</span> <span class="StringLit">&quot;health bar width &quot;</span><span class="Punctuation">,</span> <span class="Identifier">pct</span><span class="Operator">.</span><span class="Identifier">val</span> <span class="Operator">*</span> <span class="DecNumber">100</span><span class="Punctuation">,</span> <span class="StringLit">&quot;%&quot;</span>
+
+<span class="Identifier">hp</span> <span class="Operator">-=</span> <span class="DecNumber">10</span>
+<span class="Identifier">hp</span><span class="Operator">.</span><span class="Identifier">set</span> <span class="DecNumber">0</span>
+
+<span class="Comment"># output:</span>
+<span class="Comment"># health bar width 66.66666666666666%</span>
+<span class="Comment"># health bar width 60.0%</span>
+<span class="Comment"># health bar width 0.0%</span></pre></p>
+<p>to hard:</p>
+<p><pre class="listing"><span class="Identifier">suite</span> <span class="StringLit">&quot;MonsterX wrapper&quot;</span><span class="Punctuation">:</span>
+  
+  <span class="Keyword">proc</span> <span class="Identifier">baseStats</span><span class="Punctuation">(</span><span class="Identifier">hp</span> <span class="Operator">=</span> <span class="DecNumber">100</span><span class="Punctuation">,</span> <span class="Identifier">mp</span> <span class="Operator">=</span> <span class="DecNumber">0</span><span class="Punctuation">)</span><span class="Punctuation">:</span> <span class="Identifier">CoreStatsX</span> <span class="Operator">=</span>
+    <span class="Identifier">CoreStatsX</span><span class="Punctuation">(</span><span class="Identifier">hp</span><span class="Punctuation">:</span> <span class="Identifier">hp</span><span class="Punctuation">,</span> <span class="Identifier">mp</span><span class="Punctuation">:</span> <span class="Identifier">mp</span><span class="Punctuation">,</span>
+              <span class="Identifier">pos</span><span class="Punctuation">:</span> <span class="Identifier">Vec2</span><span class="Punctuation">(</span><span class="Identifier">x</span><span class="Punctuation">:</span> <span class="DecNumber">0</span><span class="Punctuation">,</span> <span class="Identifier">y</span><span class="Punctuation">:</span> <span class="DecNumber">0</span><span class="Punctuation">)</span><span class="Punctuation">,</span>
+              <span class="Identifier">resist</span><span class="Punctuation">:</span> <span class="Identifier">initTable</span><span class="Punctuation">[</span><span class="Identifier">ElementX</span><span class="Punctuation">,</span><span class="Identifier">float</span><span class="Punctuation">]</span><span class="Punctuation">(</span><span class="Punctuation">)</span><span class="Punctuation">)</span>
+  
+  <span class="Keyword">proc</span> <span class="Identifier">newGoblin</span><span class="Punctuation">(</span><span class="Identifier">id</span> <span class="Operator">=</span> <span class="DecNumber">1</span><span class="Punctuation">)</span><span class="Punctuation">:</span> <span class="Identifier">MonsterX</span> <span class="Operator">=</span>
+    <span class="Identifier">MonsterX</span><span class="Punctuation">(</span><span class="Identifier">id</span><span class="Punctuation">:</span> <span class="Identifier">id</span><span class="Punctuation">,</span>
+            <span class="Identifier">name</span><span class="Punctuation">:</span> <span class="StringLit">&quot;Gob&quot;</span> <span class="Operator">&amp;</span> <span class="Operator">$</span><span class="Identifier">id</span><span class="Punctuation">,</span>          <span class="Comment"># ← fixed</span>
+            <span class="Identifier">tags</span><span class="Punctuation">:</span> <span class="Operator">@</span><span class="Punctuation">[</span><span class="StringLit">&quot;evil&quot;</span><span class="Punctuation">]</span><span class="Punctuation">,</span>
+            <span class="Identifier">inv</span><span class="Punctuation">:</span> <span class="Identifier">initTable</span><span class="Punctuation">[</span><span class="Identifier">string</span><span class="Punctuation">,</span><span class="Identifier">int</span><span class="Punctuation">]</span><span class="Punctuation">(</span><span class="Punctuation">)</span><span class="Punctuation">,</span>
+            <span class="Identifier">stats</span><span class="Punctuation">:</span> <span class="Identifier">baseStats</span><span class="Punctuation">(</span><span class="Punctuation">)</span><span class="Punctuation">,</span>
+            <span class="Identifier">kind</span><span class="Punctuation">:</span> <span class="Identifier">spGoblinX</span><span class="Punctuation">,</span>
+            <span class="Identifier">speed</span><span class="Punctuation">:</span> <span class="FloatNumber">2.0</span><span class="Punctuation">)</span>
+  
+  <span class="Keyword">proc</span> <span class="Identifier">newDragon</span><span class="Punctuation">(</span><span class="Identifier">id</span> <span class="Operator">=</span> <span class="DecNumber">1</span><span class="Punctuation">)</span><span class="Punctuation">:</span> <span class="Identifier">MonsterX</span> <span class="Operator">=</span>
+    <span class="Identifier">MonsterX</span><span class="Punctuation">(</span><span class="Identifier">id</span><span class="Punctuation">:</span> <span class="Identifier">id</span><span class="Punctuation">,</span>
+            <span class="Identifier">name</span><span class="Punctuation">:</span> <span class="StringLit">&quot;Drg&quot;</span> <span class="Operator">&amp;</span> <span class="Operator">$</span><span class="Identifier">id</span><span class="Punctuation">,</span>          <span class="Comment"># ← fixed</span>
+            <span class="Identifier">tags</span><span class="Punctuation">:</span> <span class="Operator">@</span><span class="Punctuation">[</span><span class="StringLit">&quot;boss&quot;</span><span class="Punctuation">]</span><span class="Punctuation">,</span>
+            <span class="Identifier">inv</span><span class="Punctuation">:</span> <span class="Identifier">initTable</span><span class="Punctuation">[</span><span class="Identifier">string</span><span class="Punctuation">,</span><span class="Identifier">int</span><span class="Punctuation">]</span><span class="Punctuation">(</span><span class="Punctuation">)</span><span class="Punctuation">,</span>
+            <span class="Identifier">stats</span><span class="Punctuation">:</span> <span class="Identifier">baseStats</span><span class="Punctuation">(</span><span class="DecNumber">300</span><span class="Punctuation">)</span><span class="Punctuation">,</span>
+            <span class="Identifier">kind</span><span class="Punctuation">:</span> <span class="Identifier">spDragonX</span><span class="Punctuation">,</span>
+            <span class="Identifier">element</span><span class="Punctuation">:</span> <span class="Identifier">elFireX</span><span class="Punctuation">,</span>
+            <span class="Identifier">breath</span><span class="Punctuation">:</span> <span class="Punctuation">[</span><span class="FloatNumber">0.3</span><span class="Punctuation">,</span> <span class="FloatNumber">0.3</span><span class="Punctuation">,</span> <span class="FloatNumber">0.4</span><span class="Punctuation">]</span><span class="Punctuation">)</span>
+  
+  <span class="Identifier">test</span> <span class="StringLit">&quot;Shared primitive propagates&quot;</span><span class="Punctuation">:</span>
+    <span class="Keyword">let</span> <span class="Identifier">C</span> <span class="Operator">=</span> <span class="Identifier">newReactiveCtx</span><span class="Punctuation">(</span><span class="Punctuation">)</span>
+    <span class="Keyword">var</span> <span class="Identifier">m</span> <span class="Operator">=</span> <span class="Identifier">C</span><span class="Operator">.</span><span class="Identifier">toReactive</span><span class="Punctuation">(</span><span class="Identifier">newGoblin</span><span class="Punctuation">(</span><span class="Punctuation">)</span><span class="Punctuation">)</span>
+    <span class="Keyword">var</span> <span class="Identifier">hits</span> <span class="Operator">=</span> <span class="DecNumber">0</span>
+    <span class="Identifier">C</span><span class="Operator">.</span><span class="Identifier">effect</span> <span class="Keyword">proc</span> <span class="Operator">=</span>
+      <span class="Keyword">discard</span> <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">stats</span><span class="Operator">.</span><span class="Identifier">hp</span><span class="Operator">.</span><span class="Identifier">val</span>
+      <span class="Identifier">inc</span> <span class="Identifier">hits</span>
+    
+    <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">stats</span><span class="Operator">.</span><span class="Identifier">hp</span> <span class="Operator">+=</span> <span class="DecNumber">25</span>
+    <span class="Identifier">check</span> <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">stats</span><span class="Operator">.</span><span class="Identifier">hp</span><span class="Operator">.</span><span class="Identifier">val</span> <span class="Operator">==</span> <span class="DecNumber">125</span>
+    <span class="Identifier">check</span> <span class="Identifier">hits</span> <span class="Operator">==</span> <span class="DecNumber">2</span>           <span class="Comment"># mount + after write</span>
+  
+  <span class="Identifier">test</span> <span class="StringLit">&quot;Table alias (ResistancesX) is reactive&quot;</span><span class="Punctuation">:</span>
+    <span class="Keyword">let</span> <span class="Identifier">C</span> <span class="Operator">=</span> <span class="Identifier">newReactiveCtx</span><span class="Punctuation">(</span><span class="Punctuation">)</span>
+    <span class="Keyword">var</span> <span class="Identifier">m</span> <span class="Operator">=</span> <span class="Identifier">C</span><span class="Operator">.</span><span class="Identifier">toReactive</span><span class="Punctuation">(</span><span class="Identifier">newGoblin</span><span class="Punctuation">(</span><span class="Punctuation">)</span><span class="Punctuation">)</span>
+    <span class="Keyword">var</span> <span class="Identifier">log</span><span class="Punctuation">:</span> <span class="Identifier">seq</span><span class="Punctuation">[</span><span class="Identifier">float</span><span class="Punctuation">]</span>
+    
+    <span class="Identifier">C</span><span class="Operator">.</span><span class="Identifier">effect</span> <span class="Keyword">proc</span> <span class="Operator">=</span>
+      <span class="Keyword">discard</span> <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">stats</span><span class="Operator">.</span><span class="Identifier">resist</span><span class="Punctuation">[</span><span class="Identifier">elIceX</span><span class="Punctuation">]</span><span class="Operator">.</span><span class="Identifier">val</span>
+      <span class="Identifier">log</span><span class="Operator">.</span><span class="Identifier">add</span> <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">stats</span><span class="Operator">.</span><span class="Identifier">resist</span><span class="Punctuation">[</span><span class="Identifier">elIceX</span><span class="Punctuation">]</span><span class="Operator">.</span><span class="Identifier">val</span>
+    
+    <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">stats</span><span class="Operator">.</span><span class="Identifier">resist</span><span class="Punctuation">[</span><span class="Identifier">elIceX</span><span class="Punctuation">]</span> <span class="Operator">=</span> <span class="FloatNumber">0.5</span>       <span class="Comment"># structural put → new signal</span>
+    <span class="Identifier">check</span> <span class="Identifier">log</span> <span class="Operator">==</span> <span class="Operator">@</span><span class="Punctuation">[</span><span class="FloatNumber">0.0</span><span class="Punctuation">,</span> <span class="FloatNumber">0.5</span><span class="Punctuation">]</span>
+  
+  <span class="Identifier">test</span> <span class="StringLit">&quot;Seq alias (tags) is reactive and undo-able&quot;</span><span class="Punctuation">:</span>
+    <span class="Keyword">let</span> <span class="Identifier">C</span> <span class="Operator">=</span> <span class="Identifier">newReactiveCtx</span><span class="Punctuation">(</span><span class="Punctuation">)</span>
+    <span class="Keyword">var</span> <span class="Identifier">m</span> <span class="Operator">=</span> <span class="Identifier">C</span><span class="Operator">.</span><span class="Identifier">toReactive</span><span class="Punctuation">(</span><span class="Identifier">newGoblin</span><span class="Punctuation">(</span><span class="Punctuation">)</span><span class="Punctuation">)</span>
+    <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">tags</span><span class="Operator">.</span><span class="Identifier">push</span> <span class="StringLit">&quot;fast&quot;</span>
+    <span class="Identifier">undo</span> <span class="Identifier">C</span>
+    <span class="Identifier">check</span> <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">tags</span><span class="Operator">.</span><span class="Identifier">len</span> <span class="Operator">==</span> <span class="DecNumber">1</span>              <span class="Comment"># only original &quot;evil&quot;</span>
+  
+  <span class="Identifier">test</span> <span class="StringLit">&quot;Inventory (Table alias) structural edits&quot;</span><span class="Punctuation">:</span>
+    <span class="Keyword">let</span> <span class="Identifier">C</span> <span class="Operator">=</span> <span class="Identifier">newReactiveCtx</span><span class="Punctuation">(</span><span class="Punctuation">)</span>
+    <span class="Keyword">var</span> <span class="Identifier">m</span> <span class="Operator">=</span> <span class="Identifier">C</span><span class="Operator">.</span><span class="Identifier">toReactive</span><span class="Punctuation">(</span><span class="Identifier">newGoblin</span><span class="Punctuation">(</span><span class="Punctuation">)</span><span class="Punctuation">)</span>
+    <span class="Keyword">var</span> <span class="Identifier">revs</span><span class="Punctuation">:</span> <span class="Identifier">seq</span><span class="Punctuation">[</span><span class="Identifier">int</span><span class="Punctuation">]</span>
+    
+    <span class="Identifier">C</span><span class="Operator">.</span><span class="Identifier">effect</span> <span class="Keyword">proc</span> <span class="Operator">=</span>
+      <span class="Keyword">discard</span> <span class="Identifier">rev</span><span class="Punctuation">(</span><span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">inv</span><span class="Punctuation">)</span>               <span class="Comment"># structural rev counter</span>
+      <span class="Identifier">revs</span><span class="Operator">.</span><span class="Identifier">add</span> <span class="Identifier">rev</span><span class="Punctuation">(</span><span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">inv</span><span class="Punctuation">)</span>
+    
+    <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">inv</span><span class="Operator">.</span><span class="Identifier">put</span><span class="Punctuation">(</span><span class="StringLit">&quot;gold&quot;</span><span class="Punctuation">,</span> <span class="DecNumber">100</span><span class="Punctuation">)</span>
+    <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">inv</span><span class="Operator">.</span><span class="Identifier">put</span><span class="Punctuation">(</span><span class="StringLit">&quot;potion&quot;</span><span class="Punctuation">,</span> <span class="DecNumber">2</span><span class="Punctuation">)</span>
+    <span class="Identifier">check</span> <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">inv</span><span class="Operator">.</span><span class="Identifier">len</span> <span class="Operator">==</span> <span class="DecNumber">2</span>
+    <span class="Identifier">check</span> <span class="Identifier">revs</span><span class="Operator">.</span><span class="Identifier">len</span> <span class="Operator">==</span> <span class="DecNumber">3</span>                <span class="Comment"># mount + 2 puts</span>
+  
+  <span class="Identifier">test</span> <span class="StringLit">&quot;Variant transition keeps shared deps&quot;</span><span class="Punctuation">:</span>
+    <span class="Keyword">let</span> <span class="Identifier">C</span> <span class="Operator">=</span> <span class="Identifier">newReactiveCtx</span><span class="Punctuation">(</span><span class="Punctuation">)</span>
+    <span class="Keyword">var</span> <span class="Identifier">m</span> <span class="Operator">=</span> <span class="Identifier">C</span><span class="Operator">.</span><span class="Identifier">toReactive</span><span class="Punctuation">(</span><span class="Identifier">newGoblin</span><span class="Punctuation">(</span><span class="Punctuation">)</span><span class="Punctuation">)</span>
+    <span class="Keyword">var</span> <span class="Identifier">hpHits</span> <span class="Operator">=</span> <span class="DecNumber">0</span>
+    <span class="Identifier">C</span><span class="Operator">.</span><span class="Identifier">effect</span> <span class="Keyword">proc</span> <span class="Operator">=</span>
+      <span class="Keyword">discard</span> <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">stats</span><span class="Operator">.</span><span class="Identifier">hp</span><span class="Operator">.</span><span class="Identifier">val</span>           <span class="Comment"># shared across variants</span>
+      <span class="Identifier">inc</span> <span class="Identifier">hpHits</span>
+    
+    <span class="Identifier">check</span> <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">stats</span><span class="Operator">.</span><span class="Identifier">hp</span><span class="Operator">.</span><span class="Identifier">val</span> <span class="Operator">==</span> <span class="DecNumber">100</span>
+    
+    <span class="Comment"># transition Goblin → Dragon</span>
+    <span class="Keyword">let</span> <span class="Identifier">snapTags</span> <span class="Operator">=</span> <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">tags</span><span class="Operator">.</span><span class="Identifier">toPlain</span><span class="Punctuation">(</span><span class="Punctuation">)</span>
+    <span class="Identifier">check</span> <span class="Identifier">snapTags</span> <span class="Operator">==</span> <span class="Operator">@</span><span class="Punctuation">[</span><span class="StringLit">&quot;evil&quot;</span><span class="Punctuation">]</span>
+    
+    <span class="Keyword">let</span> <span class="Identifier">nd</span> <span class="Operator">=</span> <span class="Identifier">newDragon</span><span class="Punctuation">(</span><span class="Punctuation">)</span>
+    <span class="Identifier">check</span> <span class="Identifier">nd</span><span class="Operator">.</span><span class="Identifier">stats</span><span class="Operator">.</span><span class="Identifier">hp</span> <span class="Operator">==</span> <span class="DecNumber">300</span>
+    
+    <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">set</span> <span class="Identifier">nd</span>
+    
+    <span class="Identifier">check</span> <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">stats</span><span class="Operator">.</span><span class="Identifier">hp</span><span class="Operator">.</span><span class="Identifier">val</span> <span class="Operator">==</span> <span class="DecNumber">300</span>
+    
+    <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">stats</span><span class="Operator">.</span><span class="Identifier">hp</span> <span class="Operator">-=</span> <span class="DecNumber">1</span>
+    
+    <span class="Identifier">check</span> <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">stats</span><span class="Operator">.</span><span class="Identifier">hp</span><span class="Operator">.</span><span class="Identifier">val</span> <span class="Operator">==</span> <span class="DecNumber">299</span>
+    
+    <span class="Identifier">check</span> <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">kind</span> <span class="Operator">==</span> <span class="Identifier">spDragonX</span>
+    <span class="Identifier">check</span> <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">element</span> <span class="Operator">==</span> <span class="Identifier">elFireX</span>
+    <span class="Identifier">check</span> <span class="Identifier">hpHits</span> <span class="Operator">==</span> <span class="DecNumber">3</span>                  <span class="Comment"># mount + once after transition</span>
+    
+    <span class="Keyword">let</span> <span class="Identifier">newTags</span> <span class="Operator">=</span> <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">tags</span><span class="Operator">.</span><span class="Identifier">toPlain</span><span class="Punctuation">(</span><span class="Punctuation">)</span>
+    <span class="Identifier">check</span> <span class="Identifier">newTags</span> <span class="Operator">==</span> <span class="Operator">@</span><span class="Punctuation">[</span><span class="StringLit">&quot;boss&quot;</span><span class="Punctuation">]</span>
+  
+  <span class="Identifier">test</span> <span class="StringLit">&quot;Undo across variant transition&quot;</span><span class="Punctuation">:</span>
+    <span class="Keyword">let</span> <span class="Identifier">C</span> <span class="Operator">=</span> <span class="Identifier">newReactiveCtx</span><span class="Punctuation">(</span><span class="Punctuation">)</span>
+    <span class="Keyword">var</span> <span class="Identifier">m</span> <span class="Operator">=</span> <span class="Identifier">C</span><span class="Operator">.</span><span class="Identifier">toReactive</span><span class="Punctuation">(</span><span class="Identifier">newGoblin</span><span class="Punctuation">(</span><span class="Punctuation">)</span><span class="Punctuation">)</span>
+    <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">set</span> <span class="Identifier">newDragon</span><span class="Punctuation">(</span><span class="Punctuation">)</span>
+    <span class="Identifier">undo</span> <span class="Identifier">C</span>
+    <span class="Identifier">check</span> <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">kind</span> <span class="Operator">==</span> <span class="Identifier">spGoblinX</span>
+    <span class="Identifier">check</span> <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">speed</span><span class="Operator">.</span><span class="Identifier">val</span> <span class="Operator">==</span> <span class="FloatNumber">2.0</span>
+  
+  <span class="Identifier">test</span> <span class="StringLit">&quot;toPlain snapshot after deep edits&quot;</span><span class="Punctuation">:</span>
+    <span class="Keyword">let</span> <span class="Identifier">C</span> <span class="Operator">=</span> <span class="Identifier">newReactiveCtx</span><span class="Punctuation">(</span><span class="Punctuation">)</span>
+    <span class="Keyword">var</span> <span class="Identifier">m</span> <span class="Operator">=</span> <span class="Identifier">C</span><span class="Operator">.</span><span class="Identifier">toReactive</span><span class="Punctuation">(</span><span class="Identifier">newGoblin</span><span class="Punctuation">(</span><span class="Punctuation">)</span><span class="Punctuation">)</span>
+    <span class="Keyword">let</span> <span class="Identifier">snap</span> <span class="Operator">=</span> <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">toPlain</span><span class="Punctuation">(</span><span class="Punctuation">)</span>
+    <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">stats</span><span class="Operator">.</span><span class="Identifier">pos</span><span class="Operator">.</span><span class="Identifier">x</span><span class="Operator">.</span><span class="Identifier">set</span> <span class="DecNumber">10</span>
+    <span class="Identifier">m</span><span class="Operator">.</span><span class="Identifier">inv</span><span class="Operator">.</span><span class="Identifier">put</span><span class="Punctuation">(</span><span class="StringLit">&quot;dagger&quot;</span><span class="Punctuation">,</span> <span class="DecNumber">1</span><span class="Punctuation">)</span>
+    <span class="Identifier">check</span> <span class="Identifier">snap</span><span class="Operator">.</span><span class="Identifier">stats</span><span class="Operator">.</span><span class="Identifier">pos</span><span class="Operator">.</span><span class="Identifier">x</span> <span class="Operator">==</span> <span class="DecNumber">0</span>        <span class="Comment"># untouched snapshot</span>
+    <span class="Identifier">check</span> <span class="StringLit">&quot;dagger&quot;</span> <span class="Keyword">notin</span> <span class="Identifier">snap</span><span class="Operator">.</span><span class="Identifier">inv</span></pre></p>
 <p><strong><em>Signals</em></strong></p>
 <ul class="simple"><li>A <a class="reference internal nimdoc" title="type Signal" href="#Signal">Signal</a> stores one value of type <tt class="docutils literal"><span class="pre"><span class="Identifier">T</span></span></tt> and remembers every observer that reads it through <a class="reference internal nimdoc" title="template val(s: Signal): untyped" href="#val.t,Signal">val</a> (or wrapper access).</li>
 <li>Writing with <a class="reference internal nimdoc" title="proc set (4 overloads)" href="#set-procs-all">set</a> records an undo entry, notifies observers via the active scheduler, and marks the context dirty for autosave.</li>
@@ -3601,7 +3774,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
       <div class="twelve-columns footer">
         <span class="nim-sprite"></span>
         <br>
-        <small style="color: var(--hint);">Made with Nim. Generated: 2025-05-18 01:28:12 UTC</small>
+        <small style="color: var(--hint);">Made with Nim. Generated: 2025-05-18 01:50:43 UTC</small>
       </div>
     </div>
   </div>
