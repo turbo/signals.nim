@@ -423,6 +423,23 @@ type
     pendingOld: Table[K, Signal[V]]
     pendingActive: bool
 
+  JsonNodeReactive* = ref object
+    ## One wrapper node per JsonNode in the original tree.
+    ctx*: ReactiveCtx
+
+    # ── meta information (always present) ───────────────────────────────────
+    kind*  : Signal[JsonNodeKind]
+
+    # ── structured children (only one of these is non-nil) ─────────────────
+    fields*: ReactiveTable[string, JsonNodeReactive]   ## for JObject
+    items* : ReactiveSeq[JsonNodeReactive]             ## for JArray
+
+    # ── scalar payload (for JString / JInt / JFloat / JBool) ───────────────
+    strVal*  : Signal[string]
+    intVal*  : Signal[int]
+    floatVal*: Signal[float]
+    boolVal* : Signal[bool]
+
 proc markDirty(ctx: ReactiveCtx)
 
 proc newReactiveCtx*(): ReactiveCtx =
@@ -697,6 +714,7 @@ proc notifySubs[T](s: Signal[T]) =
   let c = s.ctx
 
   if c.batching < 1:
+    # echo "Notification for ", $T, "\n", getStackTrace()
     for cb in s.subs: c.scheduler cb
     return
 
@@ -705,6 +723,19 @@ proc notifySubs[T](s: Signal[T]) =
     if h notin c.queueHashes:
       c.queueHashes.incl h
       c.queue.add cb
+
+
+proc newReactiveNull*(ctx: ReactiveCtx): JsonNodeReactive
+
+proc mkSignal(ctx: ReactiveCtx,
+              v: JsonNodeReactive): Signal[JsonNodeReactive] =
+  ## Ensure Signal[JsonNodeReactive].value is never nil.
+  if v.isNil:
+    signal(ctx, newReactiveNull(ctx))
+  else:
+    signal(ctx, v)
+
+proc mkSignal[T](ctx: ReactiveCtx, v: T): Signal[T] = signal(ctx, v)
 
 proc set*[T](s: Signal[T], v: T) =
   ## Writes a new value into a `Signal`.
@@ -773,6 +804,29 @@ proc set*[T](s: Signal[T], v: T) =
   c.redoStack.setLen 0
   notifySubs s
   markDirty c
+
+
+proc set*[T](rs: ReactiveSeq[T], vals: seq[T]) =
+  ## Replace the entire sequence in **one** batched operation.
+  rs.mutate proc(s: var seq[Signal[T]]) =
+    s.setLen 0
+    for v in vals:
+      s.add mkSignal(rs.ctx, v)
+
+proc set*[K, V](rt: ReactiveTable[K, V], src: Table[K, V]) =
+  ## Overwrite *all* keys so that the resulting map equals `src`.
+  ## Existing signals are re-used when the key stays; others are created.
+  rt.mutate proc(t: var Table[K, Signal[V]]) =
+    var newT = initTable[K, Signal[V]]()
+    for k, v in src:
+      if k in t:
+        let s = t[k]
+        s.set v              # element write
+        newT[k] = s
+      else:
+        newT[k] = mkSignal(rt.ctx, v)
+    t = newT                 # keys not present in `src` disappear
+
 
 template `$`*(s: Signal): untyped = s.val
 template `+=`*[T](s: Signal[T], d: T) = s.set s.val + d
@@ -1388,202 +1442,554 @@ proc effectOnce*(ctx: ReactiveCtx, body: proc()) =
   body()                       # one-shot side-effect
   ctx.currentObserver = saved
 
-proc isPrimitive*(n: NimNode): bool =
-  ## Returns `true` if `n` represents one of the built-in scalar types
-  ## supported by the `reactive` macro (int, float, bool, string, etc.).
-  ## Used internally when generating wrapper fields to decide whether a
-  ## source field should become a simple `Signal` or a nested reactive
-  ## wrapper. Application code rarely needs this helper.
 
-  (n.kind in {nnkIdent, nnkSym}) and
-  n.strVal in [
-    "int",
-    "int8",
-    "int16",
-    "int32",
-    "int64",
-    "uint",
-    "uint8",
-    "uint16",
-    "uint32",
-    "uint64",
-    "float",
-    "float32",
-    "float64",
-    "bool",
-    "char",
-    "string",
-    "cstring",
-    "cfloat",
-    "cint",
-  ]
+
+
+
+template rlog*(parts: varargs[string, `$`]) =
+  when defined(debugReactive):
+    echo "[reactive] " & parts.join("")
+  else:
+    discard
+
+
+proc isPrimitive(n: NimNode): bool =
+  # Reject nodes that cannot denote a type name.
+  if n.kind notin {nnkIdent, nnkSym}:
+    rlog "isPrimitive: non-ident/sym, kind=" & $n.kind
+    return false
+
+  # Ask the compiler for the fully-resolved type category and log it.
+  let tk = n.typeKind()
+  rlog "isPrimitive: typeKind=" & $tk
+
+  # Built-in scalar kinds that can be stored directly in a Signal.
+  if tk in [
+    ntyBool,
+    ntyChar,
+    ntyPtr,
+    ntyPointer,
+    ntyString,
+    ntyCString,
+    ntyInt,
+    ntyInt8,
+    ntyInt16,
+    ntyInt32,
+    ntyInt64,
+    ntyFloat,
+    ntyFloat32,
+    ntyFloat64,
+    ntyFloat128,
+    ntyUInt,
+    ntyUInt8,
+    ntyUInt16,
+    ntyUInt32,
+    ntyUInt64
+  ]:
+    rlog "isPrimitive: matched built-in kind"
+    return true
+
+  # Accept C aliases that share the same runtime representation.
+  let res = n.strVal in ["cfloat", "cint"]
+  rlog "isPrimitive: alias match=" & $res
+  res
+
+proc isEnumType(n: NimNode): bool =
+  # Reject nodes that cannot denote a type name.
+  if n.kind notin {nnkIdent, nnkSym}:
+    rlog "isEnumType: non-ident/sym, kind=" & $n.kind
+    return false
+
+  # First ask the compiler in a `compiles` guard to avoid blowing up on
+  # opaque or not-yet-resolved symbols.
+  let ok = compiles(n.getTypeImpl.kind == nnkEnumTy) and
+           n.getTypeImpl.kind == nnkEnumTy
+  rlog "isEnumType: " & $ok & " for " & $n.repr
+  ok
+
+proc isArrayType(n: NimNode): bool =
+  # We expect the syntactic shape `array[Len, Elem]`.
+  result = n.kind == nnkBracketExpr and n.len >= 1 and
+    n[0].kind in {nnkIdent, nnkSym} and n[0].strVal == "array"
+  rlog "isArrayType: " & $result & " for " & $n.repr
+
+proc isTableLike(t: NimNode): bool =
+  # Accept `Table`, `TableRef`, and `OrderedTable` so that they can be
+  # wrapped as a `ReactiveTable`.
+  let res = t.kind == nnkBracketExpr and t.len >= 1 and
+    t[0].strVal in ["Table","TableRef","OrderedTable"]
+  rlog "isTableLike: " & $res & " for " & $t.repr
+  res
+
+proc isSeqLike(t: NimNode): bool =
+  # Detect the generic instance `seq[T]` by structure and head identifier.
+  let res = t.kind == nnkBracketExpr and t.len == 2 and t[0].strVal == "seq"
+  rlog "isSeqLike: " & $res & " for " & $t.repr
+  res
+
+
+proc unwrapAlias(n: NimNode): NimNode =
+  ## Walks a sequence of simple type‐aliases (that is, aliases whose right-hand
+  ## side is either another symbol, a generic instantiation such as
+  ## `array[3, float]`, or a tuple type) and returns the first node that is
+  ## *not* an alias.  
+  ##
+  ## A node that is already a concrete type, a non-symbol AST fragment, or an
+  ## alias that we cannot safely inspect (for example because it comes from an
+  ## imported module) is returned unchanged.
+  ##
+  ## This helper lets the wrapper generator treat aliases and their underlying
+  ## types transparently so that `Signal[int32]` and `MyInt32Alias` behave the
+  ## same in user code.
+  rlog "unwrapAlias: start with " & $n.repr
+
+  # `cur` is advanced along the alias chain until we hit a non-alias node.
+  var cur = n
+  while true:
+    # Stop when the current node is not a symbol. `array[3, float]` enters the
+    # function with `nnkBracketExpr` already — there is nothing more to unwrap.
+    if cur.kind notin {nnkSym, nnkIdent}:
+      rlog "unwrapAlias: hit non-symbol, returning " & $cur.repr
+      return cur
+
+    # Every symbol we have *must* be safe to query with `getImpl`. For symbols
+    # that come from another compilation unit or that are still generic,
+    # `getImpl` might fail, in which case we keep the symbol itself.
+    let impl =
+      try:
+        cur.getImpl
+      except Exception as e:
+        rlog "unwrapAlias: getImpl failed (" & e.msg & "), returning " &
+             $cur.repr
+        return cur
+
+    # If the implementation node is not `nnkTypeDef` we are looking at a real
+    # type or some complex definition (e.g. an object) — stop unwrapping.
+    if impl.kind != nnkTypeDef:
+      rlog "unwrapAlias: symbol is not a type alias, returning " & $cur.repr
+      return cur
+
+    # `nnkTypeDef` has the shape `[name, pragma, rhs]`; we only care about the
+    # right-hand side.
+    let rhs = impl[2]
+
+    # We detect “plain” aliases: symbols, other aliases, generic
+    # instantiations, or tuple types. Those can be followed safely. More exotic
+    # RHS kinds (such as `nnkTypeClassTy`) are left in place to avoid surprises.
+    if rhs.kind in {nnkBracketExpr, nnkSym, nnkIdent, nnkTupleTy}:
+      rlog "unwrapAlias: following alias " & $cur.repr & " → " & $rhs.repr
+      cur = rhs
+      # Continue the loop with the new node; chains of aliases collapse here.
+    else:
+      rlog "unwrapAlias: RHS is not a plain alias, returning " & $cur.repr
+      return cur
+
+proc ping*[T](s: Signal[T]) {.inline.} =
+  ## Wakes every subscriber of `s`.
+  notifySubs s
+
+
+proc ping*[T](rs: ReactiveSeq[T]) {.inline.} =
+  ## Wakes dependants of the sequence-level signals `lenS` and `revS`.
+  notifySubs rs.lenS
+  notifySubs rs.revS
+
+
+proc ping*[K, V](rt: ReactiveTable[K, V]) {.inline.} =
+  ## Wakes dependants of the table-level signals `lenS` and `revS`.
+  notifySubs rt.lenS
+  notifySubs rt.revS
+
+
+proc ping*[R](x: ref R) {.inline.} =
+  ## Delegates to `ping(x[])` when `x` is not `nil`.
+  if x != nil: ping(x[])
+
+
+proc ping*[R](x: R) {.inline.} =
+  ## Recursively pings every `Signal`, `ReactiveSeq`, and `ReactiveTable`
+  ## stored anywhere inside `x`.
+  ## Works for arbitrarily deep wrapper graphs.
+  # `fieldPairs` is available only for record-like types
+  when compiles(fieldPairs(x)):
+    for _, val in fieldPairs(x):
+      rlog "ping nested  " & $val.repr
+      ping(val)
+
+proc wrapType(srcOrig: NimNode): (NimNode, bool) =
+  # Convert a source type to the reactive-wrapper type that should be stored
+  # in an auto-generated wrapper object.
+  #
+  # The second result indicates whether the returned type already contains
+  # its own nested reactive bookkeeping (`true`) or whether only a single
+  # `Signal` around the value is needed (`false`).
+  #
+  # The function is called by the `reactive` macro for every field it
+  # encounters, so detailed logging is critical for diagnosing mis-wrapped
+  # types in user bug reports.
+
+  # Resolve chains of simple aliases so that the remaining rules operate on
+  # the canonical type node.
+  let src = unwrapAlias(srcOrig)
+
+  # Trace the alias step so the log shows exactly which names were reduced.
+  rlog "wrapType: " & $srcOrig.repr & "  →  " & $src.repr
+
+  # Primitive scalars, enums, and fixed-size arrays are wrapped in `Signal`
+  # because only their value needs change tracking.
+  if isPrimitive(src) or isEnumType(src) or isArrayType(src):
+    rlog "wrapType: Signal wrapper for primitive/enum/array " & $src.repr
+    return (nnkBracketExpr.newTree(ident"Signal", src), false)
+
+  # A `seq[T]` becomes a `ReactiveSeq[T]` so structural modifications are
+  # observable without per-element instrumentation.
+  if isSeqLike(src):
+    rlog "wrapType: ReactiveSeq wrapper for seq " & $src.repr
+    return (nnkBracketExpr.newTree(ident"ReactiveSeq", src[1]), true)
+
+  # Table-like containers map to `ReactiveTable` for the same reason.
+  if isTableLike(src):
+    rlog "wrapType: ReactiveTable wrapper for table " & $src.repr
+    return (nnkBracketExpr.newTree(ident"ReactiveTable", src[1], src[2]), true)
+
+  # If the type name already ends with “Reactive” we assume the user has
+  # provided a custom reactive wrapper and simply forward it.
+  if src.kind in {nnkIdent, nnkSym} and src.strVal.endsWith("Reactive"):
+    rlog "wrapType: type already reactive " & src.strVal
+    return (src, true)
+
+  # Otherwise synthesize a new identifier by appending “Reactive”.
+  if src.kind in {nnkIdent, nnkSym}:
+    rlog "wrapType: inferred wrapper " & src.strVal & "Reactive"
+    return (ident(src.strVal & "Reactive"), true)
+
+  # Fallback: treat anything unrecognized as a plain value wrapped in
+  # `Signal`, logging the unusual case for later inspection.
+  rlog "wrapType: fallback Signal wrapper for node kind " & $src.kind
+  (nnkBracketExpr.newTree(ident"Signal", src), false)
+
 
 macro reactive*(T: typedesc): untyped =
-  ## Turns a value object type into a reactive wrapper type.
+  ## Builds a *reactive wrapper* for the value object `T` together with three
+  ## helper procedures:
   ##
-  ## ***What it generates***
+  ## * **`toReactive(ctx, src)`** – builds the wrapper from a plain value.
+  ## * **`toPlain(self)`** – converts the wrapper back to a plain value.
+  ## * **`set(self, src)`** – overwrites the wrapper with a new plain (object)
+  ##   value while integrating with undo/redo, transactions, and variant 
+  ##   switching.
   ##
-  ## For a source object `Foo` the macro produces
-  ##
-  ## * `FooReactive`        – a ref object whose fields mirror `Foo` but each
-  ##   field is signal backed (primitive) or a nested wrapper (seq, table,
-  ##   or object).
-  ## * `toReactive(ctx, src: Foo) : FooReactive` – copies `src` into the
-  ##   wrapper, creating signals owned by `ctx`.
-  ## * `toPlain(w: FooReactive) : Foo` – returns a deep plain copy, breaking
-  ##   all reactive links.
-  ##
-  ## ***Supported field kinds***
-  ##
-  ## * Primitive scalars (int, float, bool, string, char...) become
-  ##   `Signal[T]`.
-  ## * `seq[T]` becomes `ReactiveSeq[T]`.
-  ## * `Table[K, V]`, `TableRef`, or `OrderedTable` becomes
-  ##   `ReactiveTable[K, V]`.
-  ## * Another object type becomes its own `XReactive` wrapper recursively
-  ##   (you must call `reactive(X)` beforehand).
-  ## * A field already ending in `Reactive` is copied unchanged.
-  ##
-  ## ***Typical usage***
-  ##
-  ## ```nim
-  ## type Player = object
-  ##   name: string
-  ##   hp:   int
-  ##   pos:  Vec2
-  ##
-  ## reactive(Player)
-  ##
-  ## let p = ctx.toReactive(Player(name: "Eve", hp: 100, pos: Vec2(x:0,y:0)))
-  ## p.hp -= 10                 # reactive write
-  ## echo p.pos.x.val           # reactive read
-  ## ```
-  ##
-  ## ***When to use***
-  ##
-  ## - Any structured data that needs fine grained reactivity without manual
-  ##   signal bookkeeping.
-  ## - UI view models, game entities, or config records that benefit from
-  ##   undo/redo and autosave out of the box.
+  ## ***Why you need it***
+  ## - Treats every field of `T` as a reactive value without writing any
+  ##   boiler-plate.
+  ## - Preserves object variants (`case` sections) and warns when a
+  ##   discriminator change drops dependent signals.
+  ## - Keeps plain data and reactive wrappers strictly separate so external
+  ##   code can stay unaware of the reactive layer.
   ##
   ## ***Pitfalls***
-  ##
-  ## - Only value objects are supported; the source type cannot have custom
-  ##   inheritance beyond `RootObj`.
-  ## - Recursive types require defining the inner wrapper first.
-  ## - Private fields become public in the wrapper; place sensitive data in a
-  ##   separate object if needed.
+  ## - `T` must be a *value* object; passing a `ref object` aborts compilation.
+  ## - The generated wrapper is itself a `ref` type; copying the variable
+  ##   copies the reference, not the data.
+  ## - Discriminator changes fully rebuild the wrapper; signals that vanish
+  ##   cannot be migrated automatically and only trigger a warning.
 
-  # retrieve original object
-  let td = T.getImpl()
-  var rhs = td[^1]
-  if rhs.kind == nnkRefTy: rhs = rhs[0]
-  if rhs.kind != nnkObjectTy:
-    error "reactive(): expects value object", T
+  # Identifiers reused in the generated code.
+  let ctxId  = ident"ctx"
+  let srcId  = ident"src"
+  let selfId = ident"self"
 
-  var srcFields: NimNode
-  for c in rhs.children:
-    if c.kind == nnkRecList: srcFields = c
-  if srcFields.isNil: error "reactive(): field list not found", T
+  # Accumulated statement lists for the helper procedures.
+  var toReStmts    = newStmtList()
+  var toPlainStmts = newStmtList()
+  var setStmts     = newStmtList()
 
-  # containers
-  let wrapperName = ident($T & "Reactive")
-  var dstFields = newNimNode(nnkRecList)
-  var bodyToPlain = newStmtList()
-  var bodyToReactive = newStmtList()
+  # Book-keeping for variant (`case`) handling.
+  var sharedIds: seq[NimNode] = @[]
+  var branchExclusive: seq[(NimNode, seq[NimNode])] = @[]
+  # Discriminator?
+  var discName: NimNode = nil
 
-  let ctxId = genSym(nskParam, "ctx")
-  let srcId = genSym(nskParam, "src")
-  let wrpId = genSym(nskParam, "w")
+  # Add one field to the wrapper and extend all helper bodies accordingly.
+  proc addField(
+    dst: NimNode;
+    rawId, srcType: NimNode;
+    toRe, toPlain, setS: var NimNode;
+    nameSink: var seq[NimNode]
+  ) =
+    rlog "addField: " & $rawId.repr & " type=" & $srcType.repr
+    let (dstType, wrapped) = wrapType(srcType)
 
-  # iterate fields
-  for idDefs in srcFields.children:
-    if idDefs.len < 2: continue
-    let typ = (if idDefs.len >= 3: idDefs[^2] else: idDefs[^1])
-    let nIds = idDefs.len - (if idDefs.len >= 3: 2 else: 1)
+    var idDef = newNimNode(nnkIdentDefs)
+    idDef.add rawId.copyNimTree
+    idDef.add dstType
+    idDef.add newEmptyNode()
+    dst.add idDef
 
-    # decide destination type
-    var dstTyp: NimNode
-    var usesWrapper = false
+    let fName = (if rawId.kind == nnkPostfix: rawId[1] else: rawId)
+    nameSink.add fName
 
-    # (1) primitive
-    if typ.isPrimitive:
-      dstTyp = nnkBracketExpr.newTree(ident"Signal", typ)
-
-    # (2) seq[...]
-    elif typ.kind == nnkBracketExpr and
-         typ[0].kind in {nnkIdent, nnkSym} and typ[0].strVal == "seq":
-      let elemT = typ[1]
-      dstTyp = nnkBracketExpr.newTree(ident"ReactiveSeq", elemT)
-      usesWrapper = true
-
-    # (2b) Table[...]
-    elif typ.kind == nnkBracketExpr and
-         typ[0].kind in {nnkIdent, nnkSym} and
-         typ[0].strVal in ["Table", "TableRef", "OrderedTable"]:
-      let kT = typ[1]
-      let vT = typ[2]
-      dstTyp = nnkBracketExpr.newTree(ident"ReactiveTable", kT, vT)
-      usesWrapper = true
-
-    # (3) already a *Reactive wrapper
-    elif typ.kind in {nnkIdent, nnkSym} and typ.strVal.endsWith("Reactive"):
-      dstTyp = typ
-      usesWrapper = true
-
-    # (4) generic object field – wrap recursively
+    if wrapped:
+      # Nested wrapper, delegate work to its own helpers.
+      toRe.add quote do:
+        result.`fName` = `ctxId`.toReactive(`srcId`.`fName`)
+      toPlain.add quote do:
+        result.`fName` = toPlain(`selfId`.`fName`)
+      setS.add quote do:
+        `selfId`.`fName`.set(`srcId`.`fName`)
     else:
-      dstTyp = ident(typ.strVal & "Reactive")
-      usesWrapper = true
+      # Plain value becomes a `Signal`.
+      toRe.add quote do:
+        result.`fName` = signal(`ctxId`, `srcId`.`fName`)
+      toPlain.add quote do:
+        registerDep `selfId`.`fName`
+        result.`fName` = `selfId`.`fName`.value
+      setS.add quote do:
+        set(`selfId`.`fName`, `srcId`.`fName`)
 
-    for i in 0 ..< nIds:
-      let raw = idDefs[i]
-      let fname = (if raw.kind == nnkPostfix: raw[1] else: raw)
+  # Recursive helpers that walk the source object's fields.
+  proc buildRecList(
+    srcRL: NimNode;
+    toRe, toPlain, setS: var NimNode;
+    names: var seq[NimNode]
+  ): NimNode
 
-      dstFields.add newIdentDefs(fname, dstTyp)
+  proc buildRecCase(
+    srcCase: NimNode; 
+    toRe, toPlain, setS: var NimNode
+  ): NimNode
 
-      if usesWrapper:
-        bodyToPlain.add quote do:
-          result.`fname` = toPlain(`wrpId`.`fname`)
-        bodyToReactive.add quote do:
-          result.`fname` = `ctxId`.toReactive(`srcId`.`fname`)
+  proc buildRecList(
+    srcRL: NimNode; 
+    toRe, toPlain, setS: var NimNode; 
+    names: var seq[NimNode]
+  ): NimNode =
+    result = nnkRecList.newTree()
+    rlog "buildRecList len=" & $srcRL.len
+    
+    for ch in srcRL.children:
+      case ch.kind
+      of nnkIdentDefs:
+        rlog "identDefs repr=" & $ch.repr
+        var typ: NimNode
+        if ch.len >= 3 and ch[ch.len-2].kind != nnkEmpty:
+          typ = ch[ch.len-2]
+        elif ch.len >= 3 and ch[ch.len-1].kind != nnkEmpty:
+          typ = ch[ch.len-1].getType
+        else:
+          error "reactive(): cannot infer type for field", ch[0]
+
+        let cnt = if ch.len >= 3: ch.len - 2 else: ch.len - 1
+        for i in 0 ..< cnt:
+          addField(result, ch[i], typ, toRe, toPlain, setS, names)
+      of nnkRecCase:
+        result.add buildRecCase(ch, toRe, toPlain, setS)
       else:
-        bodyToPlain.add quote do:
-          result.`fname` = `wrpId`.`fname`.val
-        bodyToReactive.add quote do:
-          result.`fname` = signal(`ctxId`, `srcId`.`fname`)
+        discard
 
-  # build wrapper type
-  let objTy = nnkObjectTy.newTree(
-                  newEmptyNode(),
-                  nnkOfInherit.newTree(ident"RootObj"),
-                  dstFields)
-  let refTy = nnkRefTy.newTree(objTy)
-  let typeDef = nnkTypeDef.newTree(wrapperName, newEmptyNode(), refTy)
+  proc buildRecCase(
+    srcCase: NimNode; 
+    toRe, toPlain, setS: var NimNode
+  ): NimNode =
+    rlog "buildRecCase repr=" & $srcCase.repr
+    let discDefs = srcCase[0]
+    
+    discName = if discDefs[0].kind == nnkPostfix: 
+      discDefs[0][1] 
+    else: 
+      discDefs[0]
+    
+    # Skeleton case statements for the helpers.
+    var caseToRe  = nnkCaseStmt.newTree(quote do: `srcId`.`discName`)
+    var casePlain = nnkCaseStmt.newTree(quote do: `selfId`.`discName`)
+    var caseSet   = nnkCaseStmt.newTree(quote do: `selfId`.`discName`)
+    toRe.add caseToRe
+    toPlain.add casePlain
+    setS.add caseSet
 
-  # helper procs
-  let toReactiveProc = quote do:
-    proc toReactive*(`ctxId`: ReactiveCtx; `srcId`: `T`): `wrapperName` =
-      new result
-      `bodyToReactive`
+    # Build the wrapper-side variant.
+    let newCase = nnkRecCase.newTree(discDefs)
 
-  let toPlainProc = quote do:
-    proc toPlain*(`wrpId`: `wrapperName`): `T` =
-      `bodyToPlain`
-      result
+    for br in srcCase.children:
+      if br.kind notin {nnkOfBranch, nnkElse}: continue
+      rlog "variant branch repr=" & $br.repr
 
+      var brToRe  = newStmtList()
+      var brPlain = newStmtList()
+      var brSet   = newStmtList()
+      var exclNames: seq[NimNode] = @[]
+
+      let fieldsRec = buildRecList(br[^1], brToRe, brPlain, brSet, exclNames)
+
+      var newBr = newNimNode(br.kind)
+      for i in 0 ..< br.len - 1: newBr.add copyNimTree(br[i])
+      newBr.add fieldsRec
+      newCase.add newBr
+
+      var branch = newNimNode(br.kind)
+      for i in 0 ..< br.len - 1: branch.add copyNimTree(br[i])
+      branch.add brToRe
+      caseToRe.add branch
+
+      branch = newNimNode(br.kind)
+      for i in 0 ..< br.len - 1: branch.add copyNimTree(br[i])
+      branch.add brPlain
+      casePlain.add branch
+
+      branch = newNimNode(br.kind)
+      for i in 0 ..< br.len - 1: branch.add copyNimTree(br[i])
+      branch.add brSet
+      caseSet.add branch
+
+      branchExclusive.add (copyNimTree(br[0]), exclNames)
+
+    result = newCase
+
+  # Parse and validate the source object.
+  let impl = T.getImpl()
+  var obj  = impl[^1]
+  if obj.kind == nnkRefTy:
+    obj = obj[0]
+  if obj.kind != nnkObjectTy:
+    error "reactive(): expects value object", T
+  rlog "SOURCE OBJECT repr=" & $obj.repr
+
+  # Build the field tree of the wrapper.
+  var dstRoot = nnkRecList.newTree()
+  dstRoot.add newIdentDefs(ident"reactCtx", ident"ReactiveCtx")
+
+  for ch in obj.children:
+    case ch.kind
+    of nnkRecList:
+      dstRoot.add buildRecList(ch, toReStmts, toPlainStmts, setStmts, sharedIds)
+    of nnkRecCase:
+      dstRoot.add buildRecCase(ch, toReStmts, toPlainStmts, setStmts)
+    else:
+      discard
+
+  # Build warnings for dropped variant fields.
+  var warnCase = nnkCaseStmt.newTree(quote do: `selfId`.`discName`)
+  for (key, names) in branchExclusive:
+    var ofBr = nnkOfBranch.newTree(copyNimTree(key))
+    var warnBody = newStmtList()
+    for idn in names:
+      let text = "reactive: variant change drops ." & idn.strVal & " – deps:"
+      warnBody.add quote do:
+        if `selfId`.`idn`.subs.len > 0:
+          rlog `text` & dumpDeps(`selfId`.`idn`).join(",")
+    ofBr.add warnBody
+    warnCase.add ofBr
+
+  # Rebuild the wrapper when the discriminator changes.
+  let transitionBlock =
+    if not discName.isNil:
+      let oldSelfSym = genSym(nskVar, "oldSelf")
+      let newSelfSym = genSym(nskVar, "newSelf")
+      let rcSym      = genSym(nskLet, "rc")
+      let slotPtrSym = genSym(nskLet, "slotPtr")
+
+      var body = newStmtList()
+
+      body.add quote do:
+        var `oldSelfSym` = `selfId`
+
+      body.add quote do:
+        var `newSelfSym` = `selfId`.reactCtx.toReactive(`srcId`)
+
+      for idn in sharedIds:
+        body.add quote do:
+          `newSelfSym`.`idn` = `selfId`.`idn`
+          `newSelfSym`.`idn`.set `srcId`.`idn`
+          ping(`newSelfSym`.`idn`)
+
+      body.add quote do:
+        `selfId` = `newSelfSym`
+        ping(`selfId`)
+
+      body.add quote do:
+        let `rcSym` = `selfId`.reactCtx
+        if not (`rcSym`.isUndoing or `rcSym`.isRedoing or `rcSym`.isDisposed):
+          let `slotPtrSym` = unsafeAddr `selfId`
+          let entry: HistoryEntry = (
+            undo: proc () =
+              `slotPtrSym`[] = `oldSelfSym`
+              ping(`slotPtrSym`[]),
+            redo: proc () =
+              `slotPtrSym`[] = `newSelfSym`
+              ping(`slotPtrSym`[])
+          )
+          `rcSym`.undoStack.add entry
+          `rcSym`.redoStack.setLen 0
+
+      quote do:
+        if `selfId`.`discName` != `srcId`.`discName`:
+          `warnCase`
+          block:
+            `body`
+          return
+    else:
+      newStmtList()
+
+  # Generate the wrapper type and helper procedures.
+  let W = ident($T & "Reactive")
+  let wrapperObj = nnkObjectTy.newTree(newEmptyNode(), newEmptyNode(), dstRoot)
+  let typeDef = nnkTypeDef.newTree(
+    W,
+    newEmptyNode(),
+    nnkRefTy.newTree(wrapperObj)
+  )
+
+  let toReactiveProc = if discName.isNil:
+    quote do:
+      proc toReactive*(`ctxId`: ReactiveCtx; `srcId`: `T`): `W` =
+        rlog "toReactive build wrapper"
+        result = new `W`
+        result.reactCtx = `ctxId`
+        `toReStmts`
+  else:
+    quote do:
+      proc toReactive*(`ctxId`: ReactiveCtx; `srcId`: `T`): `W` =
+        rlog "toReactive build wrapper with discriminator"
+        result = `W`(`discName`: `srcId`.`discName`)
+        result.reactCtx = `ctxId`
+        `toReStmts`
+
+  let toPlainProc = if discName.isNil:
+    quote do:
+      proc toPlain*(`selfId`: `W`): `T` =
+        rlog "toPlain convert wrapper to value"
+        result = `T`()
+        `toPlainStmts`
+  else:
+    quote do:
+      proc toPlain*(`selfId`: `W`): `T` =
+        rlog "toPlain convert wrapper with discriminator to value"
+        result = `T`(`discName`: `selfId`.`discName`)
+        `toPlainStmts`
+
+  let setProc = quote do:
+    proc set*(`selfId`: var `W`; `srcId`: `T`) =
+      let rc = `selfId`.reactCtx
+      `transitionBlock`
+      transaction(rc):
+        `setStmts`
+      rlog "set: wrapper updated"
+
+  # Assemble the final AST of the macro expansion.
   result = newStmtList(
     nnkTypeSection.newTree(typeDef),
     toReactiveProc,
-    toPlainProc)
+    toPlainProc,
+    setProc
+  )
+
+# end of reactive()
 
 template updateLen[T](rs: ReactiveSeq[T]) =
   let s = rs.lenS
   if s.value != rs.data.len:
     s.value = rs.data.len
     notifySubs s
-
-proc mkSignal[T](ctx: ReactiveCtx, v: T): Signal[T] = signal(ctx, v)
 
 proc mutate[T](rs: ReactiveSeq[T], op: proc (s: var seq[Signal[T]])) =
   let c = rs.ctx
@@ -1667,7 +2073,11 @@ proc toReactive*[T](ctx: ReactiveCtx, src: seq[T]): ReactiveSeq[T] =
 
   new result
   result.ctx = ctx
-  for v in src: result.data.add mkSignal(ctx, v)
+  result.data = @[]                              # ensure typed seq
+
+  for v in items(src):                           # ← explicit iterator
+    result.data.add mkSignal(ctx, v)
+
   result.lenS = signal(ctx, src.len)
   result.revS = signal(ctx, 0)
 
@@ -2574,3 +2984,159 @@ proc pow*[T](
 ): Signal[complex.Complex[T]] {.inline.} =
   ## Reactive:   rs.pow(realExponent)
   makeComputed(s, complex.pow[T](s.val, y))
+
+# std/json
+
+proc toReactive*(ctx: ReactiveCtx; n: JsonNode): JsonNodeReactive =
+  ## Recursively wraps `n` into a signal-backed tree owned by `ctx`.
+  new result
+  result.ctx  = ctx
+  result.kind = signal(ctx, n.kind)
+
+  case n.kind
+  of JObject:
+    result.fields = ctx.toReactive(initTable[string, JsonNodeReactive]())
+    for k, v in n.fields:
+      result.fields.put(k, ctx.toReactive(v))
+
+  of JArray:
+    result.items = ctx.toReactive(newSeq[JsonNodeReactive]())
+    for v in n.elems:
+      result.items.push ctx.toReactive(v)
+
+  of JString:
+    result.strVal = signal(ctx, n.str)
+
+  of JInt:
+    result.intVal = signal(ctx, int(n.num))
+
+  of JFloat:
+    result.floatVal = signal(ctx, n.fnum)
+
+  of JBool:
+    result.boolVal = signal(ctx, n.bval)
+
+  of JNull:
+    discard                 # nothing else to store
+
+proc toPlain*(jr: JsonNodeReactive): JsonNode =
+  ## Builds a fresh **immutable** `JsonNode` snapshot of the current state.
+  case jr.kind.val
+  of JObject:
+    var t = initOrderedTable[string, JsonNode]()
+    for k, sigChild in jr.fields.data:
+      t[k] = sigChild.val.toPlain()     # recurse
+    result = %*t
+
+  of JArray:
+    var a: seq[JsonNode] = @[]
+    for sigChild in jr.items.data:
+      a.add sigChild.val.toPlain()
+    result = %*a
+
+  of JString: result = newJString(jr.strVal.val)
+  of JInt:    result = newJInt   (jr.intVal.val.BiggestInt)
+  of JFloat:  result = newJFloat (jr.floatVal.val)
+  of JBool:   result = newJBool  (jr.boolVal.val)
+  of JNull:   result = newJNull()
+
+proc newReactiveNull*(ctx: ReactiveCtx): JsonNodeReactive =
+  ## Build an empty reactive node that represents JSON null.
+  new result
+  result.ctx      = ctx
+  result.kind     = signal(ctx, JNull)       # base kind
+  result.fields   = ctx.toReactive(initTable[string, JsonNodeReactive]())
+  result.items    = ctx.toReactive(newSeq[JsonNodeReactive]())
+  result.strVal   = signal(ctx, "")
+  result.intVal   = signal(ctx, 0)
+  result.floatVal = signal(ctx, 0.0)
+  result.boolVal  = signal(ctx, false)
+
+template getField*(jr: JsonNodeReactive; k: string): JsonNodeReactive =
+  ## Read *(and auto-create)* an object member as a reactive node.
+  jr.fields[k]            # ReactiveTable auto-creates a default node
+
+template push*(jr: JsonNodeReactive; child: JsonNodeReactive) =
+  ## Append a child to an array-node.
+  jr.items.push child
+
+template `[]`*(n: Signal[JsonNodeReactive]): untyped = n.val
+
+template `[]`*(n: Signal[JsonNodeReactive], key: string): untyped =
+  n.val.fields[key]          # still a Signal[JsonNodeReactive]
+
+template `[]`*(n: Signal[JsonNodeReactive], idx: int): untyped =
+  n.val.items[idx]
+
+template `[]`*(n: JsonNodeReactive; key: string): untyped =
+  n.fields[key]
+
+template `[]`*(n: JsonNodeReactive; idx: int): untyped =
+  n.items[idx]
+
+template intVal*(n: JsonNodeReactive): Signal[int]    = n.intVal
+template floatVal*(n: JsonNodeReactive): Signal[float]  = n.floatVal
+template strVal*(n: JsonNodeReactive): Signal[string] = n.strVal
+template boolVal*(n: JsonNodeReactive): Signal[bool]   = n.boolVal
+
+template intVal*(n: Signal[JsonNodeReactive]): Signal[int]    = n.val.intVal
+template floatVal*(n: Signal[JsonNodeReactive]): Signal[float]  = n.val.floatVal
+template strVal*(n: Signal[JsonNodeReactive]): Signal[string] = n.val.strVal
+template boolVal*(n: Signal[JsonNodeReactive]): Signal[bool]   = n.val.boolVal
+
+proc copyFrom(dst, src: JsonNodeReactive) =
+  ## internal helper: copy *content* of src into dst (same ctx!)
+  dst.kind.set src.kind.val
+
+  case src.kind.val
+  of JObject:
+    # replace key set
+    dst.fields.set(src.fields.toPlain())   # ReactiveTable already has `set`
+  of JArray:
+    dst.items.set(src.items.toPlain())     # ReactiveSeq already has `set`
+  of JString:
+    dst.strVal.set src.strVal.val
+  of JInt:
+    dst.intVal.set src.intVal.val
+  of JFloat:
+    dst.floatVal.set src.floatVal.val
+  of JBool:
+    dst.boolVal.set src.boolVal.val
+  of JNull:
+    discard                                 # nothing else to copy
+
+proc set*(self: JsonNodeReactive, src: JsonNode) =
+  ## Overwrite the *reactive* node with the contents of a plain JsonNode.
+  let rsrc = self.ctx.toReactive(src)       # tmp wrapper in same ctx
+  transaction(self.ctx):
+    self.copyFrom(rsrc)
+
+# system/seq ops
+
+template concatSeqs[T](lhs: ReactiveSeq[T]; rhs: seq[T]) =
+  ## Internal helper: append *all* elements of `rhs` to `lhs`
+  lhs.mutate proc (s: var seq[Signal[T]]) =
+    for v in rhs:
+      s.add mkSignal(lhs.ctx, v)
+
+proc `&`*[T](a: ReactiveSeq[T]; b: seq[T]): ReactiveSeq[T] =
+  let merged = a.toPlain() & b          # @[ ... ] & seq
+  result = a.ctx.toReactive(merged)
+
+proc `&`*[T](a: seq[T]; b: ReactiveSeq[T]): ReactiveSeq[T] =
+  let merged = a & b.toPlain()          # seq & @[ ... ]
+  result = b.ctx.toReactive(merged)
+
+proc `&`*[T](a: ReactiveSeq[T]; elem: T): ReactiveSeq[T] =
+  let merged = a.toPlain() & @[elem]
+  result = a.ctx.toReactive(merged)
+
+proc `&`*[T](elem: T; b: ReactiveSeq[T]): ReactiveSeq[T] =
+  let merged = @[elem] & b.toPlain()
+  result = b.ctx.toReactive(merged)
+
+proc `&=`*[T](rs: ReactiveSeq[T]; rhs: seq[T]) =
+  rs.concatSeqs rhs                        # one structural mutation
+
+proc `&=`*[T](rs: ReactiveSeq[T]; elem: T) =
+  rs.push elem                             # single push → correct batching

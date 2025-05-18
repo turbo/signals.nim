@@ -28,11 +28,72 @@ type
     data*: Table[string,int]
     pos* : Vec2
 
+type
+  ## 1)  “field-list” object (x*, y: float)
+  MT = object
+    x*, y: float              ## two fields in a single IdentDefs
+
+  ## 2)  object with default-initialised field
+  BT = object
+    foo*: int = 42
+
+  ## 3)  variant object referencing an enum
+  ColorSpace* = enum csSRGB, csDisplayP3
+  QT = object
+    case space*: ColorSpace    ## variant discriminator
+    of csSRGB:
+      rgb*: array[3, float]
+    of csDisplayP3:
+      p3*: array[3, float]
+
+reactive(MT)
+reactive(BT)
+reactive(QT)
+
 reactive(Player)
 reactive(Vec2)
 reactive(StatsD)
 reactive(PlayerD)
 reactive(Complex)
+
+
+# kitchen sink for reactive compiler macro
+
+# ── extra “kitchen-sink” types (Vec2 is re-used) ────────────────────────
+type
+  SpeciesX*  = enum spGoblinX, spOgreX, spDragonX
+  ElementX*  = enum elNoneX, elFireX, elIceX, elLightningX
+
+  ResistancesX* = Table[ElementX, float]
+  InventoryX*   = Table[string, int]
+
+  CoreStatsX* = object
+    hp*, mp*: int        = 100
+    pos*     : Vec2      = Vec2(x: 0, y: 0)     ## ← re-uses Vec2
+    resist*  : ResistancesX
+
+  MonsterX* = object
+    ## shared part -------------------------------------------------------
+    id*   : int
+    name* : string          = "unnamed-X"
+    tags* : seq[string]     = @[]
+    inv*  : InventoryX
+    stats*: CoreStatsX
+
+    ## variant part ------------------------------------------------------
+    case kind*: SpeciesX
+    of spGoblinX:
+      speed*   : float            
+    of spOgreX:
+      clubDmg* : int              
+    of spDragonX:
+      element* : ElementX         
+      breath*  : array[3, float]  
+
+# ── reactive wrappers for the new types ────────────────────────────────
+reactive(CoreStatsX)      # Vec2 wrapper already exists
+reactive(MonsterX)
+
 
 proc pushFront[T](rs: ReactiveSeq[T], x: T) = rs.insert(0, x)
 
@@ -935,7 +996,6 @@ suite "Edge‑case combinatorial stress":
     dispose C
     check node["z"].getInt == 4
 
-
 suite "peek / untracked read":
 
   test "peek returns value but does not track":
@@ -975,7 +1035,6 @@ suite "effectOnce":
     s.set 1                # would re-run a normal effect
     check hits == 1      # still only once
 
-
 suite "watchNow":
 
   test "watchNow fires handler on first evaluation":
@@ -999,8 +1058,6 @@ suite "watchNow":
     check seen.len == 0            # no first fire
     a.set 1
     check seen == @[1]
-
-
 
 suite "Reactive object wrapper":
 
@@ -1063,7 +1120,6 @@ suite "Reactive object wrapper":
     check hits == 2                 # initial + once after batch
     check p.x.val == 3.0
     check p.y.val == 4.0
-
 
 suite "Reactive deep‑nest regression suite (D‑types)":
 
@@ -1136,6 +1192,169 @@ suite "Reactive deep‑nest regression suite (D‑types)":
     undo C
     check s.hp.val == 50
 
+suite "Wrapper edge-cases":
+  test "field-list converted to two independent signals":
+    let C = newReactiveCtx()
+    var v = C.toReactive(MT(x: 1.0, y: 2.0))
+    v.x += 1.0
+    check v.x.val == 2.0
+    check v.y.val == 2.0            # unchanged
+
+  test "implicit-typed field works and is undo-able":
+    let C = newReactiveCtx()
+    var b = C.toReactive(BT())      # foo = 42 by default
+    b.foo += 8
+    check b.foo.val == 50
+    undo C
+    check b.foo.val == 42
+
+  test "field list becomes two signals":
+    let C = newReactiveCtx()
+    var m = C.toReactive(MT(x: 1.0, y: 2.0))
+    var cnt = 0
+    C.effect proc =
+      discard m.x.val; discard m.y.val
+      inc cnt
+    m.x.set 5.0
+    m.y.set 6.0
+    check cnt == 3            # mount + both edits
+
+  test "default-initialised field copied correctly":
+    let C = newReactiveCtx()
+    var b = C.toReactive(BT())        # no explicit init → foo = 42
+    check b.foo.val == 42
+    b.foo.set 10
+    check b.foo.val == 10
+
+  test "variant object updates branch signals":
+    let C = newReactiveCtx()
+    var q = C.toReactive(QT(space: csSRGB, rgb: [0.1, 0.2, 0.3]))
+    check q.rgb.val[1] == 0.2
+    # change the whole variant in one go
+    q.set QT(space: csDisplayP3, p3: [0.4, 0.5, 0.6])
+    check q.space == csDisplayP3
+    check q.p3.val[2] == 0.6
+
+suite "MonsterX wrapper":
+
+  # handy helpers to avoid huge literals inside the tests
+  proc baseStats(hp = 100, mp = 0): CoreStatsX =
+    CoreStatsX(hp: hp, mp: mp,
+               pos: Vec2(x: 0, y: 0),
+               resist: initTable[ElementX,float]())
+
+  proc newGoblin(id = 1): MonsterX =
+    MonsterX(id: id,
+            name: "Gob" & $id,          # ← fixed
+            tags: @["evil"],
+            inv: initTable[string,int](),
+            stats: baseStats(),
+            kind: spGoblinX,
+            speed: 2.0)
+
+  proc newDragon(id = 1): MonsterX =
+    MonsterX(id: id,
+            name: "Drg" & $id,          # ← fixed
+            tags: @["boss"],
+            inv: initTable[string,int](),
+            stats: baseStats(300),
+            kind: spDragonX,
+            element: elFireX,
+            breath: [0.3, 0.3, 0.4])
+
+  test "Shared primitive propagates":
+    let C = newReactiveCtx()
+    var m = C.toReactive(newGoblin())
+    var hits = 0
+    C.effect proc =
+      discard m.stats.hp.val
+      inc hits
+
+    m.stats.hp += 25
+    check m.stats.hp.val == 125
+    check hits == 2           # mount + after write
+
+  test "Table alias (ResistancesX) is reactive":
+    let C = newReactiveCtx()
+    var m = C.toReactive(newGoblin())
+    var log: seq[float]
+
+    C.effect proc =
+      discard m.stats.resist[elIceX].val
+      log.add m.stats.resist[elIceX].val
+
+    m.stats.resist[elIceX] = 0.5       # structural put → new signal
+    check log == @[0.0, 0.5]
+
+  test "Seq alias (tags) is reactive and undo-able":
+    let C = newReactiveCtx()
+    var m = C.toReactive(newGoblin())
+    m.tags.push "fast"
+    undo C
+    check m.tags.len == 1              # only original "evil"
+
+  test "Inventory (Table alias) structural edits":
+    let C = newReactiveCtx()
+    var m = C.toReactive(newGoblin())
+    var revs: seq[int]
+
+    C.effect proc =
+      discard rev(m.inv)               # structural rev counter
+      revs.add rev(m.inv)
+
+    m.inv.put("gold", 100)
+    m.inv.put("potion", 2)
+    check m.inv.len == 2
+    check revs.len == 3                # mount + 2 puts
+
+  test "Variant transition keeps shared deps":
+    let C = newReactiveCtx()
+    var m = C.toReactive(newGoblin())
+    var hpHits = 0
+    C.effect proc =
+      discard m.stats.hp.val           # shared across variants
+      inc hpHits
+
+    check m.stats.hp.val == 100
+
+    # transition Goblin → Dragon
+    let snapTags = m.tags.toPlain()
+    check snapTags == @["evil"]
+
+    let nd = newDragon()
+    check nd.stats.hp == 300
+
+    m.set nd
+
+    check m.stats.hp.val == 300
+
+    m.stats.hp -= 1
+
+    check m.stats.hp.val == 299
+
+    check m.kind == spDragonX
+    check m.element == elFireX
+    check hpHits == 3                  # mount + once after transition
+    
+    let newTags = m.tags.toPlain()
+    check newTags == @["boss"]
+
+  test "Undo across variant transition":
+    let C = newReactiveCtx()
+    var m = C.toReactive(newGoblin())
+    m.set newDragon()
+    undo C
+    check m.kind == spGoblinX
+    check m.speed.val == 2.0
+
+  test "toPlain snapshot after deep edits":
+    let C = newReactiveCtx()
+    var m = C.toReactive(newGoblin())
+    let snap = m.toPlain()
+    m.stats.pos.x.set 10
+    m.inv.put("dagger", 1)
+    check snap.stats.pos.x == 0        # untouched snapshot
+    check "dagger" notin snap.inv
 
 suite "Extended combinatorial tests (added)":
 
@@ -1352,6 +1571,41 @@ suite "ReactiveSeq":
       runs.inc)
     rs.push 11
     check runs == 1         # did NOT retrigger
+
+suite "ReactiveSeq concat operators":
+
+  test "&= with seq is one structural change":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[1, 2])
+    var lenHits = 0
+    C.effect proc =
+      discard rs.len
+      inc lenHits
+
+    rs &= @[3, 4]          # in-place append
+    flushQueued C
+    check rs == @[1,2,3,4]
+    check lenHits == 2     # mount + one structural update
+
+  test "& with seq builds new ReactiveSeq":
+    let C = newReactiveCtx()
+    var rs1 = C.toReactive(@[1])
+    let rs2 = rs1 & @[2, 3]
+    check rs1 == @[1]
+    check rs2 == @[1,2,3]
+
+  test "&= with single element":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[10])
+    rs &= 20
+    flushQueued C
+    check rs == @[10, 20]
+
+  test "elem & ReactiveSeq prepends element":
+    let C = newReactiveCtx()
+    var rs = C.toReactive(@[5,6])
+    let rs2 = 4 & rs
+    check rs2 == @[4,5,6]
 
 suite "Frame scheduler":
 
@@ -1938,9 +2192,6 @@ suite "Memo – watch interaction":
     base.set 4
     check outerHits == 2
 
-
-
-
 suite "Reentrancy & flush‑during‑flush":
 
   test "Effect scheduling new write inside queued flush gets processed same cycle":
@@ -2363,7 +2614,6 @@ suite "Advanced std/algorithm inter-op":
     rs.sort()                         # back to sorted
     check log == @[true,false,true]
 
-
 suite "ReactiveSeq == std/algorithm consistency":
 
   template mkPair(body: untyped): untyped =
@@ -2521,7 +2771,6 @@ suite "bitops / signal integration":
     x.bitslice(2 .. 6)
     check x.val == 0b01101'u8
 
-
 suite "Reactive vs std/bitops parity":
 
   # If mkPair is already defined elsewhere just remove the proc below.
@@ -2529,7 +2778,6 @@ suite "Reactive vs std/bitops parity":
     let C = newReactiveCtx()
     (C.signal init, init)
 
-  # ──────────────────────────────────────────────────────────────────────────
   test "mask / unmask parity":
     let (r, _) = mkPair(uint8 0b1100_0011)   # r is a Signal[uint8]
     var plain  = uint8 0b1100_0011
@@ -2646,7 +2894,6 @@ suite "Reactive vs std/bitops parity":
         var (r, plain) = mkPair(uint8 0b1011_0100)
         r.bitslice(a..b);   plain.bitslice(a..b)
         check r.val == plain
-
 
 suite "Signal-based complex helpers":
   let C     = newReactiveCtx()
@@ -2787,3 +3034,94 @@ suite "Reactive vs std/complex parity":
 
     rs /= z0;  p /= z0
     check rs.val.almostEqual p
+
+suite "Reactive JSON tree":
+
+  test "scalar change triggers effect":
+    let C  = newReactiveCtx()
+    var jr = C.toReactive(parseJson("""{ "x": 1 }"""))
+
+    var log: seq[int]
+    C.effect proc =
+      log.add jr["x"].intVal.val      # read → dependency
+
+    jr["x"].intVal.set 7
+    flushQueued C
+    check log == @[1, 7]
+
+  test "adding a new key updates len & effect":
+    let C  = newReactiveCtx()
+    var jr = C.toReactive(parseJson("""{}"""))
+
+    var lens: seq[int]
+    C.effect proc =
+      lens.add len(jr.fields)         # reactive length read
+
+    jr["a"].intVal.set 1 
+    flushQueued C
+    check lens == @[0, 1]
+
+  test "array element reactive read/write":
+    let C  = newReactiveCtx()
+    var jr = C.toReactive(parseJson("""{ "arr": [4, 5, 6] }"""))
+
+    var seen: seq[int]
+    C.effect proc =
+      seen.add jr["arr"][1].intVal.val
+
+    jr["arr"][1].intVal.set 99
+    flushQueued C
+    check seen == @[5, 99]
+
+  test "deep nested object propagates once per transaction":
+    let C  = newReactiveCtx()
+    var jr = C.toReactive(parseJson("""{ "p": { "x": 1, "y": 2 } }"""))
+    var hits = 0
+
+    C.effect proc =
+      discard jr["p"].val["x"].intVal.val
+      discard jr["p"].val["y"].intVal.val
+      inc hits
+
+    transaction(C):
+      jr["p"].val["x"].intVal.set 10
+      jr["p"].val["y"].intVal.set 20
+    flushQueued C
+    check hits == 2             # mount + once for the batch
+
+  test "undo / redo across JSON edits":
+    let C  = newReactiveCtx()
+    var jr = C.toReactive(parseJson("""{ "v": 3 }"""))
+
+    jr["v"].intVal.set 8
+    jr["v"].intVal.set 13
+    undo(C)
+    check jr["v"].intVal.val == 8
+    redo(C)
+    check jr["v"].intVal.val == 13
+
+  test "bulk set replaces entire JSON wrapper in one step":
+    let C  = newReactiveCtx()
+    var jr = C.toReactive(parseJson("""{ "a": 1 }"""))
+    var hits = 0
+
+    C.effect proc =
+      discard jr["b"].intVal.val or 0   # first run -> key absent -> 0
+      inc hits
+
+    jr.set parseJson("""{ "b": 42 }""")
+    flushQueued C
+
+    check len(jr.fields) == 1
+    check jr["b"].intVal.val == 42
+    check hits == 2                    # mount + one change
+
+
+
+
+
+
+
+
+
+# EOF

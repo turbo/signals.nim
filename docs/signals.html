@@ -59,6 +59,15 @@
       <li><a class="reference" href="#AddCleanup" title="AddCleanup = proc (c: Cleanup)">AddCleanup</a></li>
 <li><a class="reference" href="#Cleanup" title="Cleanup = proc ()">Cleanup</a></li>
 <li><a class="reference" href="#HistoryEntry" title="HistoryEntry = tuple[undo, redo: proc ()]">HistoryEntry</a></li>
+<li><a class="reference" href="#JsonNodeReactive" title="JsonNodeReactive = ref object
+  ctx*: ReactiveCtx
+  kind*: Signal[JsonNodeKind]
+  fields*: ReactiveTable[string, JsonNodeReactive] ## for JObject
+  items*: ReactiveSeq[JsonNodeReactive] ## for JArray
+  strVal*: Signal[string]
+  intVal*: Signal[int]
+  floatVal*: Signal[float]
+  boolVal*: Signal[bool]">JsonNodeReactive</a></li>
 <li><a class="reference" href="#ReactiveCtx" title="ReactiveCtx = ref object">ReactiveCtx</a></li>
 <li><a class="reference" href="#ReactiveSeq" title="ReactiveSeq[T] = ref object">ReactiveSeq</a></li>
 <li><a class="reference" href="#ReactiveTable" title="ReactiveTable[K; V] = ref object">ReactiveTable</a></li>
@@ -71,7 +80,19 @@
   <details open>
     <summary><a class="reference reference-toplevel" href="#12" id="62">Procs</a></summary>
     <ul class="simple simple-toc-section">
-      <ul class="simple nested-toc-section">*
+      <ul class="simple nested-toc-section">&
+  <li><a class="reference" href="#%26%2CReactiveSeq%5BT%5D%2Cseq%5BT%5D" title="`&amp;`[T](a: ReactiveSeq[T]; b: seq[T]): ReactiveSeq[T]">`&amp;`[T](a: ReactiveSeq[T]; b: seq[T]): ReactiveSeq[T]</a></li>
+<li><a class="reference" href="#%26%2CReactiveSeq%5BT%5D%2CT" title="`&amp;`[T](a: ReactiveSeq[T]; elem: T): ReactiveSeq[T]">`&amp;`[T](a: ReactiveSeq[T]; elem: T): ReactiveSeq[T]</a></li>
+<li><a class="reference" href="#%26%2Cseq%5BT%5D%2CReactiveSeq%5BT%5D" title="`&amp;`[T](a: seq[T]; b: ReactiveSeq[T]): ReactiveSeq[T]">`&amp;`[T](a: seq[T]; b: ReactiveSeq[T]): ReactiveSeq[T]</a></li>
+<li><a class="reference" href="#%26%2CT%2CReactiveSeq%5BT%5D" title="`&amp;`[T](elem: T; b: ReactiveSeq[T]): ReactiveSeq[T]">`&amp;`[T](elem: T; b: ReactiveSeq[T]): ReactiveSeq[T]</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">&=
+  <li><a class="reference" href="#%26%3D%2CReactiveSeq%5BT%5D%2CT" title="`&amp;=`[T](rs: ReactiveSeq[T]; elem: T)">`&amp;=`[T](rs: ReactiveSeq[T]; elem: T)</a></li>
+<li><a class="reference" href="#%26%3D%2CReactiveSeq%5BT%5D%2Cseq%5BT%5D" title="`&amp;=`[T](rs: ReactiveSeq[T]; rhs: seq[T])">`&amp;=`[T](rs: ReactiveSeq[T]; rhs: seq[T])</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">*
   <li><a class="reference" href="#%2A%2CSignal%5BComplex%5BT%5D%5D%2CSignal%5BComplex%5BT%5D%5D" title="`*`[T](a, b: Signal[Complex[T]]): Signal[Complex[T]]">`*`[T](a, b: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 <li><a class="reference" href="#%2A%2CComplex%5BT%5D%2CSignal%5BComplex%5BT%5D%5D" title="`*`[T](a: Complex[T]; b: Signal[Complex[T]]): Signal[Complex[T]]">`*`[T](a: Complex[T]; b: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 <li><a class="reference" href="#%2A%2CSignal%5BComplex%5BT%5D%5D%2CComplex%5BT%5D" title="`*`[T](a: Signal[Complex[T]]; b: Complex[T]): Signal[Complex[T]]">`*`[T](a: Signal[Complex[T]]; b: Complex[T]): Signal[Complex[T]]</a></li>
@@ -153,51 +174,51 @@
 
 </ul>
 <ul class="simple nested-toc-section">arccos
-  <li><a class="reference" href="#arccos" title="arccos[T](s`gensym82: Signal[Complex[T]]): Signal[Complex[T]]">arccos[T](s`gensym82: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#arccos" title="arccos[T](s`gensym124: Signal[Complex[T]]): Signal[Complex[T]]">arccos[T](s`gensym124: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">arccosh
-  <li><a class="reference" href="#arccosh" title="arccosh[T](s`gensym94: Signal[Complex[T]]): Signal[Complex[T]]">arccosh[T](s`gensym94: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#arccosh" title="arccosh[T](s`gensym136: Signal[Complex[T]]): Signal[Complex[T]]">arccosh[T](s`gensym136: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">arccot
-  <li><a class="reference" href="#arccot" title="arccot[T](s`gensym86: Signal[Complex[T]]): Signal[Complex[T]]">arccot[T](s`gensym86: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#arccot" title="arccot[T](s`gensym128: Signal[Complex[T]]): Signal[Complex[T]]">arccot[T](s`gensym128: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">arccoth
-  <li><a class="reference" href="#arccoth" title="arccoth[T](s`gensym98: Signal[Complex[T]]): Signal[Complex[T]]">arccoth[T](s`gensym98: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#arccoth" title="arccoth[T](s`gensym140: Signal[Complex[T]]): Signal[Complex[T]]">arccoth[T](s`gensym140: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">arccsc
-  <li><a class="reference" href="#arccsc" title="arccsc[T](s`gensym90: Signal[Complex[T]]): Signal[Complex[T]]">arccsc[T](s`gensym90: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#arccsc" title="arccsc[T](s`gensym132: Signal[Complex[T]]): Signal[Complex[T]]">arccsc[T](s`gensym132: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">arccsch
-  <li><a class="reference" href="#arccsch" title="arccsch[T](s`gensym102: Signal[Complex[T]]): Signal[Complex[T]]">arccsch[T](s`gensym102: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#arccsch" title="arccsch[T](s`gensym144: Signal[Complex[T]]): Signal[Complex[T]]">arccsch[T](s`gensym144: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">arcsec
-  <li><a class="reference" href="#arcsec" title="arcsec[T](s`gensym88: Signal[Complex[T]]): Signal[Complex[T]]">arcsec[T](s`gensym88: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#arcsec" title="arcsec[T](s`gensym130: Signal[Complex[T]]): Signal[Complex[T]]">arcsec[T](s`gensym130: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">arcsech
-  <li><a class="reference" href="#arcsech" title="arcsech[T](s`gensym100: Signal[Complex[T]]): Signal[Complex[T]]">arcsech[T](s`gensym100: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#arcsech" title="arcsech[T](s`gensym142: Signal[Complex[T]]): Signal[Complex[T]]">arcsech[T](s`gensym142: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">arcsin
-  <li><a class="reference" href="#arcsin" title="arcsin[T](s`gensym80: Signal[Complex[T]]): Signal[Complex[T]]">arcsin[T](s`gensym80: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#arcsin" title="arcsin[T](s`gensym122: Signal[Complex[T]]): Signal[Complex[T]]">arcsin[T](s`gensym122: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">arcsinh
-  <li><a class="reference" href="#arcsinh" title="arcsinh[T](s`gensym92: Signal[Complex[T]]): Signal[Complex[T]]">arcsinh[T](s`gensym92: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#arcsinh" title="arcsinh[T](s`gensym134: Signal[Complex[T]]): Signal[Complex[T]]">arcsinh[T](s`gensym134: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">arctan
-  <li><a class="reference" href="#arctan" title="arctan[T](s`gensym84: Signal[Complex[T]]): Signal[Complex[T]]">arctan[T](s`gensym84: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#arctan" title="arctan[T](s`gensym126: Signal[Complex[T]]): Signal[Complex[T]]">arctan[T](s`gensym126: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">arctanh
-  <li><a class="reference" href="#arctanh" title="arctanh[T](s`gensym96: Signal[Complex[T]]): Signal[Complex[T]]">arctanh[T](s`gensym96: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#arctanh" title="arctanh[T](s`gensym138: Signal[Complex[T]]): Signal[Complex[T]]">arctanh[T](s`gensym138: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">binarySearch
@@ -237,31 +258,31 @@
 
 </ul>
 <ul class="simple nested-toc-section">conjugate
-  <li><a class="reference" href="#conjugate" title="conjugate[T](s`gensym71: Signal[Complex[T]]): Signal[Complex[T]]">conjugate[T](s`gensym71: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#conjugate" title="conjugate[T](s`gensym113: Signal[Complex[T]]): Signal[Complex[T]]">conjugate[T](s`gensym113: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">cos
-  <li><a class="reference" href="#cos" title="cos[T](s`gensym81: Signal[Complex[T]]): Signal[Complex[T]]">cos[T](s`gensym81: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#cos" title="cos[T](s`gensym123: Signal[Complex[T]]): Signal[Complex[T]]">cos[T](s`gensym123: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">cosh
-  <li><a class="reference" href="#cosh" title="cosh[T](s`gensym93: Signal[Complex[T]]): Signal[Complex[T]]">cosh[T](s`gensym93: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#cosh" title="cosh[T](s`gensym135: Signal[Complex[T]]): Signal[Complex[T]]">cosh[T](s`gensym135: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">cot
-  <li><a class="reference" href="#cot" title="cot[T](s`gensym85: Signal[Complex[T]]): Signal[Complex[T]]">cot[T](s`gensym85: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#cot" title="cot[T](s`gensym127: Signal[Complex[T]]): Signal[Complex[T]]">cot[T](s`gensym127: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">coth
-  <li><a class="reference" href="#coth" title="coth[T](s`gensym97: Signal[Complex[T]]): Signal[Complex[T]]">coth[T](s`gensym97: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#coth" title="coth[T](s`gensym139: Signal[Complex[T]]): Signal[Complex[T]]">coth[T](s`gensym139: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">csc
-  <li><a class="reference" href="#csc" title="csc[T](s`gensym89: Signal[Complex[T]]): Signal[Complex[T]]">csc[T](s`gensym89: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#csc" title="csc[T](s`gensym131: Signal[Complex[T]]): Signal[Complex[T]]">csc[T](s`gensym131: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">csch
-  <li><a class="reference" href="#csch" title="csch[T](s`gensym101: Signal[Complex[T]]): Signal[Complex[T]]">csch[T](s`gensym101: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#csch" title="csch[T](s`gensym143: Signal[Complex[T]]): Signal[Complex[T]]">csch[T](s`gensym143: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">delKey
@@ -294,7 +315,7 @@
 
 </ul>
 <ul class="simple nested-toc-section">exp
-  <li><a class="reference" href="#exp" title="exp[T](s`gensym75: Signal[Complex[T]]): Signal[Complex[T]]">exp[T](s`gensym75: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#exp" title="exp[T](s`gensym117: Signal[Complex[T]]): Signal[Complex[T]]">exp[T](s`gensym117: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">fill
@@ -323,11 +344,7 @@
 
 </ul>
 <ul class="simple nested-toc-section">inv
-  <li><a class="reference" href="#inv" title="inv[T](s`gensym72: Signal[Complex[T]]): Signal[Complex[T]]">inv[T](s`gensym72: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
-
-</ul>
-<ul class="simple nested-toc-section">isPrimitive
-  <li><a class="reference" href="#isPrimitive%2CNimNode" title="isPrimitive(n: NimNode): bool">isPrimitive(n: NimNode): bool</a></li>
+  <li><a class="reference" href="#inv" title="inv[T](s`gensym114: Signal[Complex[T]]): Signal[Complex[T]]">inv[T](s`gensym114: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">isSorted
@@ -336,7 +353,7 @@
 
 </ul>
 <ul class="simple nested-toc-section">ln
-  <li><a class="reference" href="#ln" title="ln[T](s`gensym76: Signal[Complex[T]]): Signal[Complex[T]]">ln[T](s`gensym76: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#ln" title="ln[T](s`gensym118: Signal[Complex[T]]): Signal[Complex[T]]">ln[T](s`gensym118: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">loadState
@@ -344,11 +361,11 @@
 
 </ul>
 <ul class="simple nested-toc-section">log2
-  <li><a class="reference" href="#log2" title="log2[T](s`gensym78: Signal[Complex[T]]): Signal[Complex[T]]">log2[T](s`gensym78: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#log2" title="log2[T](s`gensym120: Signal[Complex[T]]): Signal[Complex[T]]">log2[T](s`gensym120: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">log10
-  <li><a class="reference" href="#log10" title="log10[T](s`gensym77: Signal[Complex[T]]): Signal[Complex[T]]">log10[T](s`gensym77: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#log10" title="log10[T](s`gensym119: Signal[Complex[T]]): Signal[Complex[T]]">log10[T](s`gensym119: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">lowerBound
@@ -367,6 +384,10 @@
 </ul>
 <ul class="simple nested-toc-section">newReactiveCtx
   <li><a class="reference" href="#newReactiveCtx" title="newReactiveCtx(): ReactiveCtx">newReactiveCtx(): ReactiveCtx</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">newReactiveNull
+  <li><a class="reference" href="#newReactiveNull%2CReactiveCtx" title="newReactiveNull(ctx: ReactiveCtx): JsonNodeReactive">newReactiveNull(ctx: ReactiveCtx): JsonNodeReactive</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">nextPermutation
@@ -389,6 +410,14 @@
 </ul>
 <ul class="simple nested-toc-section">phase
   <li><a class="reference" href="#phase%2CSignal%5BComplex%5BT%5D%5D" title="phase[T](s: Signal[Complex[T]]): Signal[T]">phase[T](s: Signal[Complex[T]]): Signal[T]</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">ping
+  <li><a class="reference" href="#ping%2CReactiveTable%5BK%2CV%5D" title="ping[K, V](rt: ReactiveTable[K, V])">ping[K, V](rt: ReactiveTable[K, V])</a></li>
+<li><a class="reference" href="#ping%2CR" title="ping[R](x: R)">ping[R](x: R)</a></li>
+<li><a class="reference" href="#ping%2Cref.R" title="ping[R](x: ref R)">ping[R](x: ref R)</a></li>
+<li><a class="reference" href="#ping%2CReactiveSeq%5BT%5D" title="ping[T](rs: ReactiveSeq[T])">ping[T](rs: ReactiveSeq[T])</a></li>
+<li><a class="reference" href="#ping%2CSignal%5BT%5D" title="ping[T](s: Signal[T])">ping[T](s: Signal[T])</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">polar
@@ -473,15 +502,18 @@
 
 </ul>
 <ul class="simple nested-toc-section">sec
-  <li><a class="reference" href="#sec" title="sec[T](s`gensym87: Signal[Complex[T]]): Signal[Complex[T]]">sec[T](s`gensym87: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#sec" title="sec[T](s`gensym129: Signal[Complex[T]]): Signal[Complex[T]]">sec[T](s`gensym129: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">sech
-  <li><a class="reference" href="#sech" title="sech[T](s`gensym99: Signal[Complex[T]]): Signal[Complex[T]]">sech[T](s`gensym99: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#sech" title="sech[T](s`gensym141: Signal[Complex[T]]): Signal[Complex[T]]">sech[T](s`gensym141: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">set
-  <li><a class="reference" href="#set%2CSignal%5BT%5D%2CT" title="set[T](s: Signal[T]; v: T)">set[T](s: Signal[T]; v: T)</a></li>
+  <li><a class="reference" href="#set%2CJsonNodeReactive%2CJsonNode" title="set(self: JsonNodeReactive; src: JsonNode)">set(self: JsonNodeReactive; src: JsonNode)</a></li>
+<li><a class="reference" href="#set%2CReactiveTable%5BK%2CV%5D%2CTable%5BK%2CV%5D" title="set[K, V](rt: ReactiveTable[K, V]; src: Table[K, V])">set[K, V](rt: ReactiveTable[K, V]; src: Table[K, V])</a></li>
+<li><a class="reference" href="#set%2CReactiveSeq%5BT%5D%2Cseq%5BT%5D" title="set[T](rs: ReactiveSeq[T]; vals: seq[T])">set[T](rs: ReactiveSeq[T]; vals: seq[T])</a></li>
+<li><a class="reference" href="#set%2CSignal%5BT%5D%2CT" title="set[T](s: Signal[T]; v: T)">set[T](s: Signal[T]; v: T)</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">setBit
@@ -494,7 +526,7 @@
 
 </ul>
 <ul class="simple nested-toc-section">sgn
-  <li><a class="reference" href="#sgn" title="sgn[T](s`gensym73: Signal[Complex[T]]): Signal[Complex[T]]">sgn[T](s`gensym73: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#sgn" title="sgn[T](s`gensym115: Signal[Complex[T]]): Signal[Complex[T]]">sgn[T](s`gensym115: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">signal
@@ -502,11 +534,11 @@
 
 </ul>
 <ul class="simple nested-toc-section">sin
-  <li><a class="reference" href="#sin" title="sin[T](s`gensym79: Signal[Complex[T]]): Signal[Complex[T]]">sin[T](s`gensym79: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#sin" title="sin[T](s`gensym121: Signal[Complex[T]]): Signal[Complex[T]]">sin[T](s`gensym121: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">sinh
-  <li><a class="reference" href="#sinh" title="sinh[T](s`gensym91: Signal[Complex[T]]): Signal[Complex[T]]">sinh[T](s`gensym91: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#sinh" title="sinh[T](s`gensym133: Signal[Complex[T]]): Signal[Complex[T]]">sinh[T](s`gensym133: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">snapshot
@@ -527,7 +559,7 @@
 
 </ul>
 <ul class="simple nested-toc-section">sqrt
-  <li><a class="reference" href="#sqrt" title="sqrt[T](s`gensym74: Signal[Complex[T]]): Signal[Complex[T]]">sqrt[T](s`gensym74: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#sqrt" title="sqrt[T](s`gensym116: Signal[Complex[T]]): Signal[Complex[T]]">sqrt[T](s`gensym116: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">store
@@ -535,11 +567,11 @@
 
 </ul>
 <ul class="simple nested-toc-section">tan
-  <li><a class="reference" href="#tan" title="tan[T](s`gensym83: Signal[Complex[T]]): Signal[Complex[T]]">tan[T](s`gensym83: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#tan" title="tan[T](s`gensym125: Signal[Complex[T]]): Signal[Complex[T]]">tan[T](s`gensym125: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">tanh
-  <li><a class="reference" href="#tanh" title="tanh[T](s`gensym95: Signal[Complex[T]]): Signal[Complex[T]]">tanh[T](s`gensym95: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
+  <li><a class="reference" href="#tanh" title="tanh[T](s`gensym137: Signal[Complex[T]]): Signal[Complex[T]]">tanh[T](s`gensym137: Signal[Complex[T]]): Signal[Complex[T]]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">testBit
@@ -547,12 +579,14 @@
 
 </ul>
 <ul class="simple nested-toc-section">toPlain
-  <li><a class="reference" href="#toPlain%2CReactiveTable%5BK%2CV%5D" title="toPlain[K, V](rt: ReactiveTable[K, V]): Table[K, V]">toPlain[K, V](rt: ReactiveTable[K, V]): Table[K, V]</a></li>
+  <li><a class="reference" href="#toPlain%2CJsonNodeReactive" title="toPlain(jr: JsonNodeReactive): JsonNode">toPlain(jr: JsonNodeReactive): JsonNode</a></li>
+<li><a class="reference" href="#toPlain%2CReactiveTable%5BK%2CV%5D" title="toPlain[K, V](rt: ReactiveTable[K, V]): Table[K, V]">toPlain[K, V](rt: ReactiveTable[K, V]): Table[K, V]</a></li>
 <li><a class="reference" href="#toPlain%2CReactiveSeq%5BT%5D" title="toPlain[T](rs: ReactiveSeq[T]): seq[T]">toPlain[T](rs: ReactiveSeq[T]): seq[T]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">toReactive
-  <li><a class="reference" href="#toReactive%2CReactiveCtx%2CTable%5BK%2CV%5D" title="toReactive[K, V](ctx: ReactiveCtx; src: Table[K, V]): ReactiveTable[K, V]">toReactive[K, V](ctx: ReactiveCtx; src: Table[K, V]): ReactiveTable[K, V]</a></li>
+  <li><a class="reference" href="#toReactive%2CReactiveCtx%2CJsonNode" title="toReactive(ctx: ReactiveCtx; n: JsonNode): JsonNodeReactive">toReactive(ctx: ReactiveCtx; n: JsonNode): JsonNodeReactive</a></li>
+<li><a class="reference" href="#toReactive%2CReactiveCtx%2CTable%5BK%2CV%5D" title="toReactive[K, V](ctx: ReactiveCtx; src: Table[K, V]): ReactiveTable[K, V]">toReactive[K, V](ctx: ReactiveCtx; src: Table[K, V]): ReactiveTable[K, V]</a></li>
 <li><a class="reference" href="#toReactive%2CReactiveCtx%2Cseq%5BT%5D" title="toReactive[T](ctx: ReactiveCtx; src: seq[T]): ReactiveSeq[T]">toReactive[T](ctx: ReactiveCtx; src: seq[T]): ReactiveSeq[T]</a></li>
 
 </ul>
@@ -646,11 +680,35 @@
 
 </ul>
 <ul class="simple nested-toc-section">[]
-  <li><a class="reference" href="#%5B%5D.t%2CReactiveSeq%5BT%5D%2Cint" title="`[]`[T](rs: ReactiveSeq[T]; idx: int): untyped">`[]`[T](rs: ReactiveSeq[T]; idx: int): untyped</a></li>
+  <li><a class="reference" href="#%5B%5D.t%2CJsonNodeReactive%2Cint" title="`[]`(n: JsonNodeReactive; idx: int): untyped">`[]`(n: JsonNodeReactive; idx: int): untyped</a></li>
+<li><a class="reference" href="#%5B%5D.t%2CJsonNodeReactive%2Cstring" title="`[]`(n: JsonNodeReactive; key: string): untyped">`[]`(n: JsonNodeReactive; key: string): untyped</a></li>
+<li><a class="reference" href="#%5B%5D.t%2CSignal%5BJsonNodeReactive%5D" title="`[]`(n: Signal[JsonNodeReactive]): untyped">`[]`(n: Signal[JsonNodeReactive]): untyped</a></li>
+<li><a class="reference" href="#%5B%5D.t%2CSignal%5BJsonNodeReactive%5D%2Cint" title="`[]`(n: Signal[JsonNodeReactive]; idx: int): untyped">`[]`(n: Signal[JsonNodeReactive]; idx: int): untyped</a></li>
+<li><a class="reference" href="#%5B%5D.t%2CSignal%5BJsonNodeReactive%5D%2Cstring" title="`[]`(n: Signal[JsonNodeReactive]; key: string): untyped">`[]`(n: Signal[JsonNodeReactive]; key: string): untyped</a></li>
+<li><a class="reference" href="#%5B%5D.t%2CReactiveSeq%5BT%5D%2Cint" title="`[]`[T](rs: ReactiveSeq[T]; idx: int): untyped">`[]`[T](rs: ReactiveSeq[T]; idx: int): untyped</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">boolVal
+  <li><a class="reference" href="#boolVal.t%2CJsonNodeReactive" title="boolVal(n: JsonNodeReactive): Signal[bool]">boolVal(n: JsonNodeReactive): Signal[bool]</a></li>
+<li><a class="reference" href="#boolVal.t%2CSignal%5BJsonNodeReactive%5D" title="boolVal(n: Signal[JsonNodeReactive]): Signal[bool]">boolVal(n: Signal[JsonNodeReactive]): Signal[bool]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">defUnaryComplex
   <li><a class="reference" href="#defUnaryComplex.t%2Cuntyped" title="defUnaryComplex(fname: untyped)">defUnaryComplex(fname: untyped)</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">floatVal
+  <li><a class="reference" href="#floatVal.t%2CJsonNodeReactive" title="floatVal(n: JsonNodeReactive): Signal[float]">floatVal(n: JsonNodeReactive): Signal[float]</a></li>
+<li><a class="reference" href="#floatVal.t%2CSignal%5BJsonNodeReactive%5D" title="floatVal(n: Signal[JsonNodeReactive]): Signal[float]">floatVal(n: Signal[JsonNodeReactive]): Signal[float]</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">getField
+  <li><a class="reference" href="#getField.t%2CJsonNodeReactive%2Cstring" title="getField(jr: JsonNodeReactive; k: string): JsonNodeReactive">getField(jr: JsonNodeReactive; k: string): JsonNodeReactive</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">intVal
+  <li><a class="reference" href="#intVal.t%2CJsonNodeReactive" title="intVal(n: JsonNodeReactive): Signal[int]">intVal(n: JsonNodeReactive): Signal[int]</a></li>
+<li><a class="reference" href="#intVal.t%2CSignal%5BJsonNodeReactive%5D" title="intVal(n: Signal[JsonNodeReactive]): Signal[int]">intVal(n: Signal[JsonNodeReactive]): Signal[int]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">len
@@ -671,9 +729,22 @@
   <li><a class="reference" href="#peekRev.t%2CReactiveTable" title="peekRev(rt: ReactiveTable): untyped">peekRev(rt: ReactiveTable): untyped</a></li>
 
 </ul>
+<ul class="simple nested-toc-section">push
+  <li><a class="reference" href="#push.t%2CJsonNodeReactive%2CJsonNodeReactive" title="push(jr: JsonNodeReactive; child: JsonNodeReactive)">push(jr: JsonNodeReactive; child: JsonNodeReactive)</a></li>
+
+</ul>
 <ul class="simple nested-toc-section">rev
   <li><a class="reference" href="#rev.t%2CReactiveSeq" title="rev(rs: ReactiveSeq): untyped">rev(rs: ReactiveSeq): untyped</a></li>
 <li><a class="reference" href="#rev.t%2CReactiveTable" title="rev(rt: ReactiveTable): untyped">rev(rt: ReactiveTable): untyped</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">rlog
+  <li><a class="reference" href="#rlog.t%2Cvarargs%5Bstring%2C%5D" title="rlog(parts: varargs[string, `$`])">rlog(parts: varargs[string, `$`])</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">strVal
+  <li><a class="reference" href="#strVal.t%2CJsonNodeReactive" title="strVal(n: JsonNodeReactive): Signal[string]">strVal(n: JsonNodeReactive): Signal[string]</a></li>
+<li><a class="reference" href="#strVal.t%2CSignal%5BJsonNodeReactive%5D" title="strVal(n: Signal[JsonNodeReactive]): Signal[string]">strVal(n: Signal[JsonNodeReactive]): Signal[string]</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">transaction
@@ -706,7 +777,7 @@
 <h1><a class="toc-backref" id="signals-minus-durable-reactive-effects-for-nim" href="#signals-minus-durable-reactive-effects-for-nim">Signals - Durable Reactive Effects for Nim</a></h1><p>This module implements <em>signals</em> and a lightweight runtime that keeps values, collections, and whole object graphs in sync automatically. The key ideas and how they fit together are outlined below. Each concept links to the concrete API symbol that realises it.</p>
 <p><strong><em>Signals</em></strong></p>
 <ul class="simple"><li>A <a class="reference internal nimdoc" title="type Signal" href="#Signal">Signal</a> stores one value of type <tt class="docutils literal"><span class="pre"><span class="Identifier">T</span></span></tt> and remembers every observer that reads it through <a class="reference internal nimdoc" title="template val(s: Signal): untyped" href="#val.t,Signal">val</a> (or wrapper access).</li>
-<li>Writing with <a class="reference internal nimdoc" title="proc set[T](s: Signal[T]; v: T)" href="#set,Signal[T],T">set</a> records an undo entry, notifies observers via the active scheduler, and marks the context dirty for autosave.</li>
+<li>Writing with <a class="reference internal nimdoc" title="proc set (4 overloads)" href="#set-procs-all">set</a> records an undo entry, notifies observers via the active scheduler, and marks the context dirty for autosave.</li>
 </ul>
 <p><strong><em>Derived values</em></strong></p>
 <ul class="simple"><li><a class="reference internal nimdoc" title="proc computed[T](ctx: ReactiveCtx; getter: proc (): T; setter: proc (v: T) = nil): Signal[
@@ -734,7 +805,7 @@
 </ul>
 <p><strong><em>Object wrappers</em></strong></p>
 <ul class="simple"><li>The <a class="reference internal nimdoc" title="macro reactive(T: typedesc): untyped" href="#reactive.m,typedesc">reactive</a> macro generates a parallel <tt class="docutils literal"><span class="pre"><span class="Identifier">XReactive</span></span></tt> type whose fields are signals or nested reactive wrappers.</li>
-<li><a class="reference internal nimdoc" title="proc toReactive (2 overloads)" href="#toReactive-procs-all">toReactive</a> converts a plain object or collection into its wrapper; <a class="reference internal nimdoc" title="proc toPlain (2 overloads)" href="#toPlain-procs-all">toPlain</a> returns an immutable deep copy.</li>
+<li><a class="reference internal nimdoc" title="proc toReactive (3 overloads)" href="#toReactive-procs-all">toReactive</a> converts a plain object or collection into its wrapper; <a class="reference internal nimdoc" title="proc toPlain (3 overloads)" href="#toPlain-procs-all">toPlain</a> returns an immutable deep copy.</li>
 </ul>
 <p><strong><em>Schedulers</em></strong></p>
 <ul class="simple"><li>The default immediate scheduler runs reactions at once.</li>
@@ -817,6 +888,22 @@ Internal record used by the undo/redo system.</p>
 <li>Do not call signal setters inside <tt class="docutils literal"><span class="pre"><span class="Identifier">undo</span></span></tt> or <tt class="docutils literal"><span class="pre"><span class="Identifier">redo</span></span></tt> that would push <em>new</em> history entries; set the raw field values instead or wrap the call inside <tt class="docutils literal"><span class="pre"><span class="Identifier">ctx</span><span class="Operator">.</span><span class="Identifier">isUndoing</span></span></tt> / <tt class="docutils literal"><span class="pre"><span class="Identifier">ctx</span><span class="Operator">.</span><span class="Identifier">isRedoing</span></span></tt>.</li>
 </ul>
 
+    
+  </dd>
+</div>
+<div id="JsonNodeReactive">
+  <dt><pre><a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a> <span class="Other">=</span> <span class="Keyword">ref</span> <span class="Keyword">object</span>
+  <span class="Identifier">ctx</span><span class="Operator">*</span><span class="Other">:</span> <a href="signals.html#ReactiveCtx"><span class="Identifier">ReactiveCtx</span></a>
+  <span class="Identifier">kind</span><span class="Operator">*</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">JsonNodeKind</span><span class="Other">]</span>
+  <span class="Identifier">fields</span><span class="Operator">*</span><span class="Other">:</span> <a href="signals.html#ReactiveTable"><span class="Identifier">ReactiveTable</span></a><span class="Other">[</span><span class="Identifier">string</span><span class="Other">,</span> <a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">]</span> <span class="Comment">## for JObject</span>
+  <span class="Identifier">items</span><span class="Operator">*</span><span class="Other">:</span> <a href="signals.html#ReactiveSeq"><span class="Identifier">ReactiveSeq</span></a><span class="Other">[</span><a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">]</span> <span class="Comment">## for JArray</span>
+  <span class="Identifier">strVal</span><span class="Operator">*</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span>
+  <span class="Identifier">intVal</span><span class="Operator">*</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">int</span><span class="Other">]</span>
+  <span class="Identifier">floatVal</span><span class="Operator">*</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">float</span><span class="Other">]</span>
+  <span class="Identifier">boolVal</span><span class="Operator">*</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">bool</span><span class="Other">]</span></pre></dt>
+  <dd>
+    
+    One wrapper node per JsonNode in the original tree.
     
   </dd>
 </div>
@@ -973,7 +1060,61 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 <div class="section" id="12">
   <h1><a class="toc-backref" href="#12">Procs</a></h1>
   <dl class="item">
-    <div id="*-procs-all">
+    <div id="&amp;-procs-all">
+  <div id="&,ReactiveSeq[T],seq[T]">
+  <dt><pre><span class="Keyword">proc</span> <a href="#%26%2CReactiveSeq%5BT%5D%2Cseq%5BT%5D"><span class="Identifier">`&amp;`</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">a</span><span class="Other">:</span> <a href="signals.html#ReactiveSeq"><span class="Identifier">ReactiveSeq</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">;</span> <span class="Identifier">b</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#ReactiveSeq"><span class="Identifier">ReactiveSeq</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+<div id="&,ReactiveSeq[T],T">
+  <dt><pre><span class="Keyword">proc</span> <a href="#%26%2CReactiveSeq%5BT%5D%2CT"><span class="Identifier">`&amp;`</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">a</span><span class="Other">:</span> <a href="signals.html#ReactiveSeq"><span class="Identifier">ReactiveSeq</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">;</span> <span class="Identifier">elem</span><span class="Other">:</span> <span class="Identifier">T</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#ReactiveSeq"><span class="Identifier">ReactiveSeq</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+<div id="&,seq[T],ReactiveSeq[T]">
+  <dt><pre><span class="Keyword">proc</span> <a href="#%26%2Cseq%5BT%5D%2CReactiveSeq%5BT%5D"><span class="Identifier">`&amp;`</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">a</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">;</span> <span class="Identifier">b</span><span class="Other">:</span> <a href="signals.html#ReactiveSeq"><span class="Identifier">ReactiveSeq</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#ReactiveSeq"><span class="Identifier">ReactiveSeq</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+<div id="&,T,ReactiveSeq[T]">
+  <dt><pre><span class="Keyword">proc</span> <a href="#%26%2CT%2CReactiveSeq%5BT%5D"><span class="Identifier">`&amp;`</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">elem</span><span class="Other">:</span> <span class="Identifier">T</span><span class="Other">;</span> <span class="Identifier">b</span><span class="Other">:</span> <a href="signals.html#ReactiveSeq"><span class="Identifier">ReactiveSeq</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#ReactiveSeq"><span class="Identifier">ReactiveSeq</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+
+</div>
+<div id="&amp;=-procs-all">
+  <div id="&=,ReactiveSeq[T],T">
+  <dt><pre><span class="Keyword">proc</span> <a href="#%26%3D%2CReactiveSeq%5BT%5D%2CT"><span class="Identifier">`&amp;=`</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">rs</span><span class="Other">:</span> <a href="signals.html#ReactiveSeq"><span class="Identifier">ReactiveSeq</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">;</span> <span class="Identifier">elem</span><span class="Other">:</span> <span class="Identifier">T</span><span class="Other">)</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+<div id="&=,ReactiveSeq[T],seq[T]">
+  <dt><pre><span class="Keyword">proc</span> <a href="#%26%3D%2CReactiveSeq%5BT%5D%2Cseq%5BT%5D"><span class="Identifier">`&amp;=`</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">rs</span><span class="Other">:</span> <a href="signals.html#ReactiveSeq"><span class="Identifier">ReactiveSeq</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">;</span> <span class="Identifier">rhs</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">)</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+
+</div>
+<div id="*-procs-all">
   <div id="*,Signal[Complex[T]],Signal[Complex[T]]">
   <dt><pre><span class="Keyword">proc</span> <a href="#%2A%2CSignal%5BComplex%5BT%5D%5D%2CSignal%5BComplex%5BT%5D%5D"><span class="Identifier">`*`</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">a</span><span class="Other">,</span> <span class="Identifier">b</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span></pre></dt>
   <dd>
@@ -1308,7 +1449,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="arccos-procs-all">
   <div id="arccos">
-  <dt><pre><span class="Keyword">proc</span> <a href="#arccos"><span class="Identifier">arccos</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym82</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#arccos"><span class="Identifier">arccos</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym124</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1319,7 +1460,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="arccosh-procs-all">
   <div id="arccosh">
-  <dt><pre><span class="Keyword">proc</span> <a href="#arccosh"><span class="Identifier">arccosh</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym94</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#arccosh"><span class="Identifier">arccosh</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym136</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1330,7 +1471,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="arccot-procs-all">
   <div id="arccot">
-  <dt><pre><span class="Keyword">proc</span> <a href="#arccot"><span class="Identifier">arccot</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym86</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#arccot"><span class="Identifier">arccot</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym128</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1341,7 +1482,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="arccoth-procs-all">
   <div id="arccoth">
-  <dt><pre><span class="Keyword">proc</span> <a href="#arccoth"><span class="Identifier">arccoth</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym98</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#arccoth"><span class="Identifier">arccoth</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym140</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1352,7 +1493,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="arccsc-procs-all">
   <div id="arccsc">
-  <dt><pre><span class="Keyword">proc</span> <a href="#arccsc"><span class="Identifier">arccsc</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym90</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#arccsc"><span class="Identifier">arccsc</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym132</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1363,7 +1504,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="arccsch-procs-all">
   <div id="arccsch">
-  <dt><pre><span class="Keyword">proc</span> <a href="#arccsch"><span class="Identifier">arccsch</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym102</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#arccsch"><span class="Identifier">arccsch</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym144</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1374,7 +1515,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="arcsec-procs-all">
   <div id="arcsec">
-  <dt><pre><span class="Keyword">proc</span> <a href="#arcsec"><span class="Identifier">arcsec</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym88</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#arcsec"><span class="Identifier">arcsec</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym130</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1385,7 +1526,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="arcsech-procs-all">
   <div id="arcsech">
-  <dt><pre><span class="Keyword">proc</span> <a href="#arcsech"><span class="Identifier">arcsech</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym100</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#arcsech"><span class="Identifier">arcsech</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym142</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1396,7 +1537,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="arcsin-procs-all">
   <div id="arcsin">
-  <dt><pre><span class="Keyword">proc</span> <a href="#arcsin"><span class="Identifier">arcsin</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym80</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#arcsin"><span class="Identifier">arcsin</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym122</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1407,7 +1548,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="arcsinh-procs-all">
   <div id="arcsinh">
-  <dt><pre><span class="Keyword">proc</span> <a href="#arcsinh"><span class="Identifier">arcsinh</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym92</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#arcsinh"><span class="Identifier">arcsinh</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym134</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1418,7 +1559,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="arctan-procs-all">
   <div id="arctan">
-  <dt><pre><span class="Keyword">proc</span> <a href="#arctan"><span class="Identifier">arctan</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym84</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#arctan"><span class="Identifier">arctan</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym126</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1429,7 +1570,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="arctanh-procs-all">
   <div id="arctanh">
-  <dt><pre><span class="Keyword">proc</span> <a href="#arctanh"><span class="Identifier">arctanh</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym96</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#arctanh"><span class="Identifier">arctanh</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym138</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1584,7 +1725,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="conjugate-procs-all">
   <div id="conjugate">
-  <dt><pre><span class="Keyword">proc</span> <a href="#conjugate"><span class="Identifier">conjugate</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym71</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#conjugate"><span class="Identifier">conjugate</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym113</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1595,7 +1736,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="cos-procs-all">
   <div id="cos">
-  <dt><pre><span class="Keyword">proc</span> <a href="#cos"><span class="Identifier">cos</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym81</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#cos"><span class="Identifier">cos</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym123</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1606,7 +1747,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="cosh-procs-all">
   <div id="cosh">
-  <dt><pre><span class="Keyword">proc</span> <a href="#cosh"><span class="Identifier">cosh</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym93</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#cosh"><span class="Identifier">cosh</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym135</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1617,7 +1758,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="cot-procs-all">
   <div id="cot">
-  <dt><pre><span class="Keyword">proc</span> <a href="#cot"><span class="Identifier">cot</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym85</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#cot"><span class="Identifier">cot</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym127</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1628,7 +1769,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="coth-procs-all">
   <div id="coth">
-  <dt><pre><span class="Keyword">proc</span> <a href="#coth"><span class="Identifier">coth</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym97</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#coth"><span class="Identifier">coth</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym139</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1639,7 +1780,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="csc-procs-all">
   <div id="csc">
-  <dt><pre><span class="Keyword">proc</span> <a href="#csc"><span class="Identifier">csc</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym89</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#csc"><span class="Identifier">csc</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym131</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1650,7 +1791,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="csch-procs-all">
   <div id="csch">
-  <dt><pre><span class="Keyword">proc</span> <a href="#csch"><span class="Identifier">csch</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym101</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#csch"><span class="Identifier">csch</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym143</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1844,7 +1985,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="exp-procs-all">
   <div id="exp">
-  <dt><pre><span class="Keyword">proc</span> <a href="#exp"><span class="Identifier">exp</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym75</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#exp"><span class="Identifier">exp</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym117</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -1947,21 +2088,10 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="inv-procs-all">
   <div id="inv">
-  <dt><pre><span class="Keyword">proc</span> <a href="#inv"><span class="Identifier">inv</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym72</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#inv"><span class="Identifier">inv</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym114</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
-    
-  </dd>
-</div>
-
-</div>
-<div id="isPrimitive-procs-all">
-  <div id="isPrimitive,NimNode">
-  <dt><pre><span class="Keyword">proc</span> <a href="#isPrimitive%2CNimNode"><span class="Identifier">isPrimitive</span></a><span class="Other">(</span><span class="Identifier">n</span><span class="Other">:</span> <span class="Identifier">NimNode</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
-  <dd>
-    
-    Returns <tt class="docutils literal"><span class="pre"><span class="Identifier">true</span></span></tt> if <tt class="docutils literal"><span class="pre"><span class="Identifier">n</span></span></tt> represents one of the built-in scalar types supported by the <tt class="docutils literal"><span class="pre"><span class="Identifier">reactive</span></span></tt> macro (int, float, bool, string, etc.). Used internally when generating wrapper fields to decide whether a source field should become a simple <tt class="docutils literal"><span class="pre"><span class="Identifier">Signal</span></span></tt> or a nested reactive wrapper. Application code rarely needs this helper.
     
   </dd>
 </div>
@@ -1989,7 +2119,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="ln-procs-all">
   <div id="ln">
-  <dt><pre><span class="Keyword">proc</span> <a href="#ln"><span class="Identifier">ln</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym76</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#ln"><span class="Identifier">ln</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym118</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -2026,7 +2156,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="log2-procs-all">
   <div id="log2">
-  <dt><pre><span class="Keyword">proc</span> <a href="#log2"><span class="Identifier">log2</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym78</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#log2"><span class="Identifier">log2</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym120</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -2037,7 +2167,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="log10-procs-all">
   <div id="log10">
-  <dt><pre><span class="Keyword">proc</span> <a href="#log10"><span class="Identifier">log10</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym77</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#log10"><span class="Identifier">log10</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym119</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -2128,6 +2258,18 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 
 </div>
+<div id="newReactiveNull-procs-all">
+  <div id="newReactiveNull,ReactiveCtx">
+  <dt><pre><span class="Keyword">proc</span> <a href="#newReactiveNull%2CReactiveCtx"><span class="Identifier">newReactiveNull</span></a><span class="Other">(</span><span class="Identifier">ctx</span><span class="Other">:</span> <a href="signals.html#ReactiveCtx"><span class="Identifier">ReactiveCtx</span></a><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+
+</div>
 <div id="nextPermutation-procs-all">
   <div id="nextPermutation,ReactiveSeq[T]">
   <dt><pre><span class="Keyword">proc</span> <a href="#nextPermutation%2CReactiveSeq%5BT%5D"><span class="Identifier">nextPermutation</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">rs</span><span class="Other">:</span> <a href="signals.html#ReactiveSeq"><span class="Identifier">ReactiveSeq</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span class="Identifier">discardable</span>.}</pre></dt>
@@ -2194,6 +2336,49 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
   <dd>
     
     <p><tt class="docutils literal"><span class="pre"><span class="Identifier">result</span> <span class="Operator">=</span> <span class="Identifier">phase</span><span class="Punctuation">(</span><span class="Identifier">s</span><span class="Operator">.</span><span class="Identifier">val</span><span class="Punctuation">)</span></span></tt> (argument / angle)<br/></p>
+    
+  </dd>
+</div>
+
+</div>
+<div id="ping-procs-all">
+  <div id="ping,ReactiveTable[K,V]">
+  <dt><pre><span class="Keyword">proc</span> <a href="#ping%2CReactiveTable%5BK%2CV%5D"><span class="Identifier">ping</span></a><span class="Other">[</span><span class="Identifier">K</span><span class="Other">,</span> <span class="Identifier">V</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">rt</span><span class="Other">:</span> <a href="signals.html#ReactiveTable"><span class="Identifier">ReactiveTable</span></a><span class="Other">[</span><span class="Identifier">K</span><span class="Other">,</span> <span class="Identifier">V</span><span class="Other">]</span><span class="Other">)</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dd>
+    
+    Wakes dependants of the table-level signals <tt class="docutils literal"><span class="pre"><span class="Identifier">lenS</span></span></tt> and <tt class="docutils literal"><span class="pre"><span class="Identifier">revS</span></span></tt>.
+    
+  </dd>
+</div>
+<div id="ping,R">
+  <dt><pre><span class="Keyword">proc</span> <a href="#ping%2CR"><span class="Identifier">ping</span></a><span class="Other">[</span><span class="Identifier">R</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">x</span><span class="Other">:</span> <span class="Identifier">R</span><span class="Other">)</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dd>
+    
+    Recursively pings every <tt class="docutils literal"><span class="pre"><span class="Identifier">Signal</span></span></tt>, <tt class="docutils literal"><span class="pre"><span class="Identifier">ReactiveSeq</span></span></tt>, and <tt class="docutils literal"><span class="pre"><span class="Identifier">ReactiveTable</span></span></tt> stored anywhere inside <tt class="docutils literal"><span class="pre"><span class="Identifier">x</span></span></tt>. Works for arbitrarily deep wrapper graphs.
+    
+  </dd>
+</div>
+<div id="ping,ref.R">
+  <dt><pre><span class="Keyword">proc</span> <a href="#ping%2Cref.R"><span class="Identifier">ping</span></a><span class="Other">[</span><span class="Identifier">R</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">x</span><span class="Other">:</span> <span class="Keyword">ref</span> <span class="Identifier">R</span><span class="Other">)</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dd>
+    
+    Delegates to <tt class="docutils literal"><span class="pre"><span class="Identifier">ping</span><span class="Punctuation">(</span><span class="Identifier">x</span><span class="Punctuation">[</span><span class="Punctuation">]</span><span class="Punctuation">)</span></span></tt> when <tt class="docutils literal"><span class="pre"><span class="Identifier">x</span></span></tt> is not <tt class="docutils literal"><span class="pre"><span class="Keyword">nil</span></span></tt>.
+    
+  </dd>
+</div>
+<div id="ping,ReactiveSeq[T]">
+  <dt><pre><span class="Keyword">proc</span> <a href="#ping%2CReactiveSeq%5BT%5D"><span class="Identifier">ping</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">rs</span><span class="Other">:</span> <a href="signals.html#ReactiveSeq"><span class="Identifier">ReactiveSeq</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">)</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dd>
+    
+    Wakes dependants of the sequence-level signals <tt class="docutils literal"><span class="pre"><span class="Identifier">lenS</span></span></tt> and <tt class="docutils literal"><span class="pre"><span class="Identifier">revS</span></span></tt>.
+    
+  </dd>
+</div>
+<div id="ping,Signal[T]">
+  <dt><pre><span class="Keyword">proc</span> <a href="#ping%2CSignal%5BT%5D"><span class="Identifier">ping</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">)</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dd>
+    
+    Wakes every subscriber of <tt class="docutils literal"><span class="pre"><span class="Identifier">s</span></span></tt>.
     
   </dd>
 </div>
@@ -2464,7 +2649,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="sec-procs-all">
   <div id="sec">
-  <dt><pre><span class="Keyword">proc</span> <a href="#sec"><span class="Identifier">sec</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym87</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#sec"><span class="Identifier">sec</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym129</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -2475,7 +2660,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="sech-procs-all">
   <div id="sech">
-  <dt><pre><span class="Keyword">proc</span> <a href="#sech"><span class="Identifier">sech</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym99</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#sech"><span class="Identifier">sech</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym141</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -2485,7 +2670,32 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 
 </div>
 <div id="set-procs-all">
-  <div id="set,Signal[T],T">
+  <div id="set,JsonNodeReactive,JsonNode">
+  <dt><pre><span class="Keyword">proc</span> <a href="#set%2CJsonNodeReactive%2CJsonNode"><span class="Identifier">set</span></a><span class="Other">(</span><span class="Identifier">self</span><span class="Other">:</span> <a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">;</span> <span class="Identifier">src</span><span class="Other">:</span> <span class="Identifier">JsonNode</span><span class="Other">)</span> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Overwrite the <em>reactive</em> node with the contents of a plain JsonNode.
+    
+  </dd>
+</div>
+<div id="set,ReactiveTable[K,V],Table[K,V]">
+  <dt><pre><span class="Keyword">proc</span> <a href="#set%2CReactiveTable%5BK%2CV%5D%2CTable%5BK%2CV%5D"><span class="Identifier">set</span></a><span class="Other">[</span><span class="Identifier">K</span><span class="Other">,</span> <span class="Identifier">V</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">rt</span><span class="Other">:</span> <a href="signals.html#ReactiveTable"><span class="Identifier">ReactiveTable</span></a><span class="Other">[</span><span class="Identifier">K</span><span class="Other">,</span> <span class="Identifier">V</span><span class="Other">]</span><span class="Other">;</span> <span class="Identifier">src</span><span class="Other">:</span> <span class="Identifier">Table</span><span class="Other">[</span><span class="Identifier">K</span><span class="Other">,</span> <span class="Identifier">V</span><span class="Other">]</span><span class="Other">)</span></pre></dt>
+  <dd>
+    
+    Overwrite <em>all</em> keys so that the resulting map equals <tt class="docutils literal"><span class="pre"><span class="Identifier">src</span></span></tt>. Existing signals are re-used when the key stays; others are created.
+    
+  </dd>
+</div>
+<div id="set,ReactiveSeq[T],seq[T]">
+  <dt><pre><span class="Keyword">proc</span> <a href="#set%2CReactiveSeq%5BT%5D%2Cseq%5BT%5D"><span class="Identifier">set</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">rs</span><span class="Other">:</span> <a href="signals.html#ReactiveSeq"><span class="Identifier">ReactiveSeq</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">;</span> <span class="Identifier">vals</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">)</span></pre></dt>
+  <dd>
+    
+    Replace the entire sequence in <strong>one</strong> batched operation.
+    
+  </dd>
+</div>
+<div id="set,Signal[T],T">
   <dt><pre><span class="Keyword">proc</span> <a href="#set%2CSignal%5BT%5D%2CT"><span class="Identifier">set</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">;</span> <span class="Identifier">v</span><span class="Other">:</span> <span class="Identifier">T</span><span class="Other">)</span></pre></dt>
   <dd>
     
@@ -2541,7 +2751,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="sgn-procs-all">
   <div id="sgn">
-  <dt><pre><span class="Keyword">proc</span> <a href="#sgn"><span class="Identifier">sgn</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym73</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#sgn"><span class="Identifier">sgn</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym115</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -2582,7 +2792,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="sin-procs-all">
   <div id="sin">
-  <dt><pre><span class="Keyword">proc</span> <a href="#sin"><span class="Identifier">sin</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym79</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#sin"><span class="Identifier">sin</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym121</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -2593,7 +2803,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="sinh-procs-all">
   <div id="sinh">
-  <dt><pre><span class="Keyword">proc</span> <a href="#sinh"><span class="Identifier">sinh</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym91</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#sinh"><span class="Identifier">sinh</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym133</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -2647,7 +2857,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="sqrt-procs-all">
   <div id="sqrt">
-  <dt><pre><span class="Keyword">proc</span> <a href="#sqrt"><span class="Identifier">sqrt</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym74</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#sqrt"><span class="Identifier">sqrt</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym116</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -2674,7 +2884,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="tan-procs-all">
   <div id="tan">
-  <dt><pre><span class="Keyword">proc</span> <a href="#tan"><span class="Identifier">tan</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym83</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#tan"><span class="Identifier">tan</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym125</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -2685,7 +2895,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 <div id="tanh-procs-all">
   <div id="tanh">
-  <dt><pre><span class="Keyword">proc</span> <a href="#tanh"><span class="Identifier">tanh</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym95</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#tanh"><span class="Identifier">tanh</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">s`gensym137</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">Complex</span><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">]</span> {.<span class="Identifier">inline</span>.}</pre></dt>
   <dd>
     
     
@@ -2706,7 +2916,15 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 
 </div>
 <div id="toPlain-procs-all">
-  <div id="toPlain,ReactiveTable[K,V]">
+  <div id="toPlain,JsonNodeReactive">
+  <dt><pre><span class="Keyword">proc</span> <a href="#toPlain%2CJsonNodeReactive"><span class="Identifier">toPlain</span></a><span class="Other">(</span><span class="Identifier">jr</span><span class="Other">:</span> <a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">JsonNode</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Builds a fresh <strong>immutable</strong> <tt class="docutils literal"><span class="pre"><span class="Identifier">JsonNode</span></span></tt> snapshot of the current state.
+    
+  </dd>
+</div>
+<div id="toPlain,ReactiveTable[K,V]">
   <dt><pre><span class="Keyword">proc</span> <a href="#toPlain%2CReactiveTable%5BK%2CV%5D"><span class="Identifier">toPlain</span></a><span class="Other">[</span><span class="Identifier">K</span><span class="Other">,</span> <span class="Identifier">V</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">rt</span><span class="Other">:</span> <a href="signals.html#ReactiveTable"><span class="Identifier">ReactiveTable</span></a><span class="Other">[</span><span class="Identifier">K</span><span class="Other">,</span> <span class="Identifier">V</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">Table</span><span class="Other">[</span><span class="Identifier">K</span><span class="Other">,</span> <span class="Identifier">V</span><span class="Other">]</span></pre></dt>
   <dd>
     
@@ -2725,7 +2943,16 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 
 </div>
 <div id="toReactive-procs-all">
-  <div id="toReactive,ReactiveCtx,Table[K,V]">
+  <div id="toReactive,ReactiveCtx,JsonNode">
+  <dt><pre><span class="Keyword">proc</span> <a href="#toReactive%2CReactiveCtx%2CJsonNode"><span class="Identifier">toReactive</span></a><span class="Other">(</span><span class="Identifier">ctx</span><span class="Other">:</span> <a href="signals.html#ReactiveCtx"><span class="Identifier">ReactiveCtx</span></a><span class="Other">;</span> <span class="Identifier">n</span><span class="Other">:</span> <span class="Identifier">JsonNode</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Recursively wraps <tt class="docutils literal"><span class="pre"><span class="Identifier">n</span></span></tt> into a signal-backed tree owned by <tt class="docutils literal"><span class="pre"><span class="Identifier">ctx</span></span></tt>.
+    
+  </dd>
+</div>
+<div id="toReactive,ReactiveCtx,Table[K,V]">
   <dt><pre><span class="Keyword">proc</span> <a href="#toReactive%2CReactiveCtx%2CTable%5BK%2CV%5D"><span class="Identifier">toReactive</span></a><span class="Other">[</span><span class="Identifier">K</span><span class="Other">,</span> <span class="Identifier">V</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">ctx</span><span class="Other">:</span> <a href="signals.html#ReactiveCtx"><span class="Identifier">ReactiveCtx</span></a><span class="Other">;</span> <span class="Identifier">src</span><span class="Other">:</span> <span class="Identifier">Table</span><span class="Other">[</span><span class="Identifier">K</span><span class="Other">,</span> <span class="Identifier">V</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#ReactiveTable"><span class="Identifier">ReactiveTable</span></a><span class="Other">[</span><span class="Identifier">K</span><span class="Other">,</span> <span class="Identifier">V</span><span class="Other">]</span></pre></dt>
   <dd>
     
@@ -2962,39 +3189,19 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
   <dt><pre><span class="Keyword">macro</span> <a href="#reactive.m%2Ctypedesc"><span class="Identifier">reactive</span></a><span class="Other">(</span><span class="Identifier">T</span><span class="Other">:</span> <span class="Identifier">typedesc</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">untyped</span></pre></dt>
   <dd>
     
-    <p>Turns a value object type into a reactive wrapper type.</p>
-<p><strong><em>What it generates</em></strong></p>
-<p>For a source object <tt class="docutils literal"><span class="pre"><span class="Identifier">Foo</span></span></tt> the macro produces</p>
-<ul class="simple"><li><tt class="docutils literal"><span class="pre"><span class="Identifier">FooReactive</span></span></tt>        – a ref object whose fields mirror <tt class="docutils literal"><span class="pre"><span class="Identifier">Foo</span></span></tt> but each field is signal backed (primitive) or a nested wrapper (seq, table, or object).</li>
-<li><tt class="docutils literal"><span class="pre"><span class="Identifier">toReactive</span><span class="Punctuation">(</span><span class="Identifier">ctx</span><span class="Punctuation">,</span> <span class="Identifier">src</span><span class="Punctuation">:</span> <span class="Identifier">Foo</span><span class="Punctuation">)</span> <span class="Punctuation">:</span> <span class="Identifier">FooReactive</span></span></tt> – copies <tt class="docutils literal"><span class="pre"><span class="Identifier">src</span></span></tt> into the wrapper, creating signals owned by <tt class="docutils literal"><span class="pre"><span class="Identifier">ctx</span></span></tt>.</li>
-<li><tt class="docutils literal"><span class="pre"><span class="Identifier">toPlain</span><span class="Punctuation">(</span><span class="Identifier">w</span><span class="Punctuation">:</span> <span class="Identifier">FooReactive</span><span class="Punctuation">)</span> <span class="Punctuation">:</span> <span class="Identifier">Foo</span></span></tt> – returns a deep plain copy, breaking all reactive links.</li>
+    Builds a <em>reactive wrapper</em> for the value object <tt class="docutils literal"><span class="pre"><span class="Identifier">T</span></span></tt> together with three helper procedures:<ul class="simple"><li><strong>`toReactive(ctx, src)`</strong> – builds the wrapper from a plain value.</li>
+<li><strong>`toPlain(self)`</strong> – converts the wrapper back to a plain value.</li>
+<li><strong>`set(self, src)`</strong> – overwrites the wrapper with a new plain (object) value while integrating with undo/redo, transactions, and variant switching.</li>
 </ul>
-<p><strong><em>Supported field kinds</em></strong></p>
-<ul class="simple"><li>Primitive scalars (int, float, bool, string, char...) become <tt class="docutils literal"><span class="pre"><span class="Identifier">Signal</span><span class="Punctuation">[</span><span class="Identifier">T</span><span class="Punctuation">]</span></span></tt>.</li>
-<li><tt class="docutils literal"><span class="pre"><span class="Identifier">seq</span><span class="Punctuation">[</span><span class="Identifier">T</span><span class="Punctuation">]</span></span></tt> becomes <tt class="docutils literal"><span class="pre"><span class="Identifier">ReactiveSeq</span><span class="Punctuation">[</span><span class="Identifier">T</span><span class="Punctuation">]</span></span></tt>.</li>
-<li><tt class="docutils literal"><span class="pre"><span class="Identifier">Table</span><span class="Punctuation">[</span><span class="Identifier">K</span><span class="Punctuation">,</span> <span class="Identifier">V</span><span class="Punctuation">]</span></span></tt>, <tt class="docutils literal"><span class="pre"><span class="Identifier">TableRef</span></span></tt>, or <tt class="docutils literal"><span class="pre"><span class="Identifier">OrderedTable</span></span></tt> becomes <tt class="docutils literal"><span class="pre"><span class="Identifier">ReactiveTable</span><span class="Punctuation">[</span><span class="Identifier">K</span><span class="Punctuation">,</span> <span class="Identifier">V</span><span class="Punctuation">]</span></span></tt>.</li>
-<li>Another object type becomes its own <tt class="docutils literal"><span class="pre"><span class="Identifier">XReactive</span></span></tt> wrapper recursively (you must call <tt class="docutils literal"><span class="pre"><span class="Identifier">reactive</span><span class="Punctuation">(</span><span class="Identifier">X</span><span class="Punctuation">)</span></span></tt> beforehand).</li>
-<li>A field already ending in <tt class="docutils literal"><span class="pre"><span class="Identifier">Reactive</span></span></tt> is copied unchanged.</li>
-</ul>
-<p><strong><em>Typical usage</em></strong></p>
-<p><pre class="listing"><span class="Keyword">type</span> <span class="Identifier">Player</span> <span class="Operator">=</span> <span class="Keyword">object</span>
-  <span class="Identifier">name</span><span class="Punctuation">:</span> <span class="Identifier">string</span>
-  <span class="Identifier">hp</span><span class="Punctuation">:</span>   <span class="Identifier">int</span>
-  <span class="Identifier">pos</span><span class="Punctuation">:</span>  <span class="Identifier">Vec2</span>
-
-<span class="Identifier">reactive</span><span class="Punctuation">(</span><span class="Identifier">Player</span><span class="Punctuation">)</span>
-
-<span class="Keyword">let</span> <span class="Identifier">p</span> <span class="Operator">=</span> <span class="Identifier">ctx</span><span class="Operator">.</span><span class="Identifier">toReactive</span><span class="Punctuation">(</span><span class="Identifier">Player</span><span class="Punctuation">(</span><span class="Identifier">name</span><span class="Punctuation">:</span> <span class="StringLit">&quot;Eve&quot;</span><span class="Punctuation">,</span> <span class="Identifier">hp</span><span class="Punctuation">:</span> <span class="DecNumber">100</span><span class="Punctuation">,</span> <span class="Identifier">pos</span><span class="Punctuation">:</span> <span class="Identifier">Vec2</span><span class="Punctuation">(</span><span class="Identifier">x</span><span class="Punctuation">:</span><span class="DecNumber">0</span><span class="Punctuation">,</span><span class="Identifier">y</span><span class="Punctuation">:</span><span class="DecNumber">0</span><span class="Punctuation">)</span><span class="Punctuation">)</span><span class="Punctuation">)</span>
-<span class="Identifier">p</span><span class="Operator">.</span><span class="Identifier">hp</span> <span class="Operator">-=</span> <span class="DecNumber">10</span>                 <span class="Comment"># reactive write</span>
-<span class="Identifier">echo</span> <span class="Identifier">p</span><span class="Operator">.</span><span class="Identifier">pos</span><span class="Operator">.</span><span class="Identifier">x</span><span class="Operator">.</span><span class="Identifier">val</span>           <span class="Comment"># reactive read</span></pre></p>
-<p><strong><em>When to use</em></strong></p>
-<ul class="simple"><li>Any structured data that needs fine grained reactivity without manual signal bookkeeping.</li>
-<li>UI view models, game entities, or config records that benefit from undo/redo and autosave out of the box.</li>
+<p><strong><em>Why you need it</em></strong></p>
+<ul class="simple"><li>Treats every field of <tt class="docutils literal"><span class="pre"><span class="Identifier">T</span></span></tt> as a reactive value without writing any boiler-plate.</li>
+<li>Preserves object variants (<tt class="docutils literal"><span class="pre"><span class="Keyword">case</span></span></tt> sections) and warns when a discriminator change drops dependent signals.</li>
+<li>Keeps plain data and reactive wrappers strictly separate so external code can stay unaware of the reactive layer.</li>
 </ul>
 <p><strong><em>Pitfalls</em></strong></p>
-<ul class="simple"><li>Only value objects are supported; the source type cannot have custom inheritance beyond <tt class="docutils literal"><span class="pre"><span class="Identifier">RootObj</span></span></tt>.</li>
-<li>Recursive types require defining the inner wrapper first.</li>
-<li>Private fields become public in the wrapper; place sensitive data in a separate object if needed.</li>
+<ul class="simple"><li><tt class="docutils literal"><span class="pre"><span class="Identifier">T</span></span></tt> must be a <em>value</em> object; passing a <tt class="docutils literal"><span class="pre"><span class="Keyword">ref</span> <span class="Keyword">object</span></span></tt> aborts compilation.</li>
+<li>The generated wrapper is itself a <tt class="docutils literal"><span class="pre"><span class="Keyword">ref</span></span></tt> type; copying the variable copies the reference, not the data.</li>
+<li>Discriminator changes fully rebuild the wrapper; signals that vanish cannot be migrated automatically and only trigger a warning.</li>
 </ul>
 
     
@@ -3053,8 +3260,67 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 
 </div>
 <div id="[]-templates-all">
-  <div id="[].t,ReactiveSeq[T],int">
+  <div id="[].t,JsonNodeReactive,int">
+  <dt><pre><span class="Keyword">template</span> <a href="#%5B%5D.t%2CJsonNodeReactive%2Cint"><span class="Identifier">`[]`</span></a><span class="Other">(</span><span class="Identifier">n</span><span class="Other">:</span> <a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">;</span> <span class="Identifier">idx</span><span class="Other">:</span> <span class="Identifier">int</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">untyped</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+<div id="[].t,JsonNodeReactive,string">
+  <dt><pre><span class="Keyword">template</span> <a href="#%5B%5D.t%2CJsonNodeReactive%2Cstring"><span class="Identifier">`[]`</span></a><span class="Other">(</span><span class="Identifier">n</span><span class="Other">:</span> <a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">;</span> <span class="Identifier">key</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">untyped</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+<div id="[].t,Signal[JsonNodeReactive]">
+  <dt><pre><span class="Keyword">template</span> <a href="#%5B%5D.t%2CSignal%5BJsonNodeReactive%5D"><span class="Identifier">`[]`</span></a><span class="Other">(</span><span class="Identifier">n</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">untyped</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+<div id="[].t,Signal[JsonNodeReactive],int">
+  <dt><pre><span class="Keyword">template</span> <a href="#%5B%5D.t%2CSignal%5BJsonNodeReactive%5D%2Cint"><span class="Identifier">`[]`</span></a><span class="Other">(</span><span class="Identifier">n</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">]</span><span class="Other">;</span> <span class="Identifier">idx</span><span class="Other">:</span> <span class="Identifier">int</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">untyped</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+<div id="[].t,Signal[JsonNodeReactive],string">
+  <dt><pre><span class="Keyword">template</span> <a href="#%5B%5D.t%2CSignal%5BJsonNodeReactive%5D%2Cstring"><span class="Identifier">`[]`</span></a><span class="Other">(</span><span class="Identifier">n</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">]</span><span class="Other">;</span> <span class="Identifier">key</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">untyped</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+<div id="[].t,ReactiveSeq[T],int">
   <dt><pre><span class="Keyword">template</span> <a href="#%5B%5D.t%2CReactiveSeq%5BT%5D%2Cint"><span class="Identifier">`[]`</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">(</span><span class="Identifier">rs</span><span class="Other">:</span> <a href="signals.html#ReactiveSeq"><span class="Identifier">ReactiveSeq</span></a><span class="Other">[</span><span class="Identifier">T</span><span class="Other">]</span><span class="Other">;</span> <span class="Identifier">idx</span><span class="Other">:</span> <span class="Identifier">int</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">untyped</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+
+</div>
+<div id="boolVal-templates-all">
+  <div id="boolVal.t,JsonNodeReactive">
+  <dt><pre><span class="Keyword">template</span> <a href="#boolVal.t%2CJsonNodeReactive"><span class="Identifier">boolVal</span></a><span class="Other">(</span><span class="Identifier">n</span><span class="Other">:</span> <a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">bool</span><span class="Other">]</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+<div id="boolVal.t,Signal[JsonNodeReactive]">
+  <dt><pre><span class="Keyword">template</span> <a href="#boolVal.t%2CSignal%5BJsonNodeReactive%5D"><span class="Identifier">boolVal</span></a><span class="Other">(</span><span class="Identifier">n</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">bool</span><span class="Other">]</span></pre></dt>
   <dd>
     
     
@@ -3066,6 +3332,55 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 <div id="defUnaryComplex-templates-all">
   <div id="defUnaryComplex.t,untyped">
   <dt><pre><span class="Keyword">template</span> <a href="#defUnaryComplex.t%2Cuntyped"><span class="Identifier">defUnaryComplex</span></a><span class="Other">(</span><span class="Identifier">fname</span><span class="Other">:</span> <span class="Identifier">untyped</span><span class="Other">)</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+
+</div>
+<div id="floatVal-templates-all">
+  <div id="floatVal.t,JsonNodeReactive">
+  <dt><pre><span class="Keyword">template</span> <a href="#floatVal.t%2CJsonNodeReactive"><span class="Identifier">floatVal</span></a><span class="Other">(</span><span class="Identifier">n</span><span class="Other">:</span> <a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">float</span><span class="Other">]</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+<div id="floatVal.t,Signal[JsonNodeReactive]">
+  <dt><pre><span class="Keyword">template</span> <a href="#floatVal.t%2CSignal%5BJsonNodeReactive%5D"><span class="Identifier">floatVal</span></a><span class="Other">(</span><span class="Identifier">n</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">float</span><span class="Other">]</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+
+</div>
+<div id="getField-templates-all">
+  <div id="getField.t,JsonNodeReactive,string">
+  <dt><pre><span class="Keyword">template</span> <a href="#getField.t%2CJsonNodeReactive%2Cstring"><span class="Identifier">getField</span></a><span class="Other">(</span><span class="Identifier">jr</span><span class="Other">:</span> <a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">;</span> <span class="Identifier">k</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a></pre></dt>
+  <dd>
+    
+    Read <em>(and auto-create)</em> an object member as a reactive node.
+    
+  </dd>
+</div>
+
+</div>
+<div id="intVal-templates-all">
+  <div id="intVal.t,JsonNodeReactive">
+  <dt><pre><span class="Keyword">template</span> <a href="#intVal.t%2CJsonNodeReactive"><span class="Identifier">intVal</span></a><span class="Other">(</span><span class="Identifier">n</span><span class="Other">:</span> <a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">int</span><span class="Other">]</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+<div id="intVal.t,Signal[JsonNodeReactive]">
+  <dt><pre><span class="Keyword">template</span> <a href="#intVal.t%2CSignal%5BJsonNodeReactive%5D"><span class="Identifier">intVal</span></a><span class="Other">(</span><span class="Identifier">n</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">int</span><span class="Other">]</span></pre></dt>
   <dd>
     
     
@@ -3138,6 +3453,17 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
 </div>
 
 </div>
+<div id="push-templates-all">
+  <div id="push.t,JsonNodeReactive,JsonNodeReactive">
+  <dt><pre><span class="Keyword">template</span> <a href="#push.t%2CJsonNodeReactive%2CJsonNodeReactive"><span class="Identifier">push</span></a><span class="Other">(</span><span class="Identifier">jr</span><span class="Other">:</span> <a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">;</span> <span class="Identifier">child</span><span class="Other">:</span> <a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">)</span></pre></dt>
+  <dd>
+    
+    Append a child to an array-node.
+    
+  </dd>
+</div>
+
+</div>
 <div id="rev-templates-all">
   <div id="rev.t,ReactiveSeq">
   <dt><pre><span class="Keyword">template</span> <a href="#rev.t%2CReactiveSeq"><span class="Identifier">rev</span></a><span class="Other">(</span><span class="Identifier">rs</span><span class="Other">:</span> <a href="signals.html#ReactiveSeq"><span class="Identifier">ReactiveSeq</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">untyped</span></pre></dt>
@@ -3152,6 +3478,36 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
   <dd>
     
     Returns the structural revision counter of a <tt class="docutils literal"><span class="pre"><span class="Identifier">ReactiveTable</span></span></tt> and tracks the caller as a subscriber. The counter increments on every key set, key removal, or <tt class="docutils literal"><span class="pre"><span class="Identifier">clear</span></span></tt>, allowing an effect to react to any structural mutation even when the entry count stays the same.
+    
+  </dd>
+</div>
+
+</div>
+<div id="rlog-templates-all">
+  <div id="rlog.t,varargs[string,]">
+  <dt><pre><span class="Keyword">template</span> <a href="#rlog.t%2Cvarargs%5Bstring%2C%5D"><span class="Identifier">rlog</span></a><span class="Other">(</span><span class="Identifier">parts</span><span class="Other">:</span> <span class="Identifier">varargs</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">,</span> <span class="Other">`</span><span class="Operator">$</span><span class="Other">`</span><span class="Other">]</span><span class="Other">)</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+
+</div>
+<div id="strVal-templates-all">
+  <div id="strVal.t,JsonNodeReactive">
+  <dt><pre><span class="Keyword">template</span> <a href="#strVal.t%2CJsonNodeReactive"><span class="Identifier">strVal</span></a><span class="Other">(</span><span class="Identifier">n</span><span class="Other">:</span> <a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+<div id="strVal.t,Signal[JsonNodeReactive]">
+  <dt><pre><span class="Keyword">template</span> <a href="#strVal.t%2CSignal%5BJsonNodeReactive%5D"><span class="Identifier">strVal</span></a><span class="Other">(</span><span class="Identifier">n</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><a href="signals.html#JsonNodeReactive"><span class="Identifier">JsonNodeReactive</span></a><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="signals.html#Signal"><span class="Identifier">Signal</span></a><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span></pre></dt>
+  <dd>
+    
+    
     
   </dd>
 </div>
@@ -3245,7 +3601,7 @@ Reactive value container that stores one <tt class="docutils literal"><span clas
       <div class="twelve-columns footer">
         <span class="nim-sprite"></span>
         <br>
-        <small style="color: var(--hint);">Made with Nim. Generated: 2025-05-16 21:50:41 UTC</small>
+        <small style="color: var(--hint);">Made with Nim. Generated: 2025-05-18 01:28:12 UTC</small>
       </div>
     </div>
   </div>
